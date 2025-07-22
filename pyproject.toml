@@ -11,7 +11,7 @@ requires-python = ">=3.10"
 license = {text = "MIT"}
 dependencies = [
     "gradio",
-    "faiss-cpu",
+    "faiss-gpu",
     "sentence-transformers",
     "torch",
     "bitsandbytes",

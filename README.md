@@ -26,8 +26,8 @@ pipx run hatch run python -m vgj_chat --hf-token <HF_TOKEN>
 
 ## Dependencies
 
-The application requires `bitsandbytes` in addition to the standard
-dependencies listed in `pyproject.toml`.
+The application requires `bitsandbytes` and `faiss-gpu` in addition to the
+standard dependencies listed in `pyproject.toml`.
 
 ## Docker
 
