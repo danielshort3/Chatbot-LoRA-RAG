@@ -35,6 +35,9 @@ class Config:
     cuda: bool = torch.cuda.is_available()
     debug: bool = True
 
+    # authentication
+    hf_token: str | None = None
+
     @staticmethod
     def _convert(value: str, typ: type):
         """Convert *value* to *typ* for overrides."""

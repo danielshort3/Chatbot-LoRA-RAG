@@ -6,6 +6,7 @@ from typing import Generator, List, Tuple
 
 import faiss  # type: ignore
 import torch  # type: ignore
+from huggingface_hub import login
 from peft import PeftModel  # type: ignore
 from sentence_transformers import CrossEncoder, SentenceTransformer
 from transformers import (
@@ -41,6 +42,8 @@ def _boot() -> tuple[
     CrossEncoder,
     pipeline,
 ]:
+    if CFG.hf_token is not None:
+        login(token=CFG.hf_token)
     logger.info("Loading FAISS index and metadata …")
     index = load_index(CFG.index_path)
     texts, urls = load_metadata(CFG.meta_path)
