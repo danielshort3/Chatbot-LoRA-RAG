@@ -41,7 +41,7 @@ will run the crawler and indexer so the demo is ready to launch:
 
 ```bash
 docker build -t vgj-chat .
-docker run -p 7860:7860 vgj-chat
+docker run -p 7860:7860 -e VGJ_HF_TOKEN=<token> vgj-chat
 ```
 
 ## Architecture
