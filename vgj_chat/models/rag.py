@@ -66,6 +66,9 @@ def _boot() -> tuple[
     texts, urls = load_metadata(CFG.meta_path)
 
     device = "cuda" if CFG.cuda else "cpu"
+    logger.info(
+        "Using device: %s (CUDA available: %s)", device, torch.cuda.is_available()
+    )
     logger.info("Initialising embedding & re‑rank models …")
     embedder = SentenceTransformer(CFG.embed_model, device=device)
     reranker = CrossEncoder(CFG.rerank_model, device=device)

@@ -8,8 +8,12 @@ from typing import Iterable
 
 import faiss  # type: ignore
 import nltk
+import logging
 from sentence_transformers import SentenceTransformer
 from tqdm.auto import tqdm
+import torch
+
+logger = logging.getLogger(__name__)
 
 CHUNK_TOKENS = 200
 OVERLAP_TOKENS = 40
@@ -38,7 +42,13 @@ def build_index(
     txt_dir: Path, index_path: Path, meta_path: Path, embed_model: str
 ) -> None:
     """Chunk ``txt_dir`` and build a FAISS index + metadata file."""
-    embedder = SentenceTransformer(embed_model)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    logger.info(
+        "Using %s for embeddings (CUDA available: %s)",
+        device,
+        torch.cuda.is_available(),
+    )
+    embedder = SentenceTransformer(embed_model, device=device)
     index = None
     meta_f = meta_path.open("w")
     files = sorted(txt_dir.glob("*.txt"))
