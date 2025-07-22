@@ -34,6 +34,21 @@ package in addition to the standard dependencies listed in `pyproject.toml`.
 FAISS will automatically use the GPU whenever `torch.cuda.is_available()` is
 true or when the `--cuda` option is passed; otherwise it falls back to the CPU.
 
+## LoRA adapter
+
+This repository does not include the fine‑tuned LoRA adapter weights. Point the
+application at your own checkpoint by passing `--lora-dir` or setting the
+`VGJ_LORA_DIR` environment variable:
+
+```bash
+python -m vgj_chat --lora-dir path/to/lora-checkpoint
+# or
+VGJ_LORA_DIR=path/to/lora-checkpoint python -m vgj_chat
+```
+
+Run `scripts/finetune.py` to train a new adapter when suitable data is
+available.
+
 ## Docker
 
 A Dockerfile is provided for a fully containerised setup. Building the image
