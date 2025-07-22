@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, fields, replace
+from typing import get_type_hints
 from pathlib import Path
 import os
 import argparse
 import torch
+
 
 @dataclass(frozen=True)
 class Config:
@@ -50,19 +52,23 @@ class Config:
         """Create config using environment variables prefixed with ``VGJ_``."""
         defaults = cls()
         updates = {}
+        hints = get_type_hints(cls)
         for f in fields(cls):
             env_name = f"VGJ_{f.name.upper()}"
             if env_name in os.environ:
-                updates[f.name] = cls._convert(os.environ[env_name], f.type)
+                typ = hints.get(f.name, f.type)
+                updates[f.name] = cls._convert(os.environ[env_name], typ)
         return replace(defaults, **updates)
 
     def apply_cli_args(self, args: argparse.Namespace) -> "Config":
         """Return a new config overriding with parsed command-line arguments."""
         updates = {}
+        hints = get_type_hints(self.__class__)
         for f in fields(self):
             val = getattr(args, f.name, None)
             if val is not None:
-                updates[f.name] = self._convert(val, f.type)
+                typ = hints.get(f.name, f.type)
+                updates[f.name] = self._convert(val, typ)
         return replace(self, **updates)
 
     @classmethod
