@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=67", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vgj_chat"
+version = "0.1.0"
+description = "RAG chatbot using a LoRA adapted language model"
+readme = "README.md"
+requires-python = ">=3.12"
+license = {text = "MIT"}
+dependencies = [
+    "gradio",
+    "faiss-cpu",
+    "sentence-transformers",
+    "torch",
+    "peft",
+    "datasets",
+    "scikit-learn",
+    "transformers",
+    "nltk",
+    "tqdm",
+    "numpy",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black",
+    "isort",
+    "ruff",
+    "pytest",
+    "pre-commit",
+]
+
+[tool.black]
+line-length = 88
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.ruff]
+line-length = 88
+
+[tool.pytest.ini_options]
+addopts = "-ra"
