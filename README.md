@@ -9,6 +9,27 @@ Launch the Gradio demo with:
 python -m vgj_chat
 ```
 
+## Quick start
+
+Create a local environment with [Hatch](https://hatch.pypa.io/) and run the demo:
+
+```bash
+pipx run hatch env create
+pipx run hatch run python -m vgj_chat
+```
+
+## Architecture
+
+```
+vgj_chat
+├── cli.py            # CLI entrypoint launching the UI
+├── config.py         # dataclass with configuration defaults
+├── ui/gradio_app.py  # builds the Gradio interface
+├── data/             # crawling, indexing and dataset helpers
+├── models/           # RAG model, LoRA fine-tuning and guardrails
+└── __main__.py       # allows `python -m vgj_chat`
+```
+
 ## Configuration
 
 Configuration defaults live in `vgj_chat.config.Config`.  Any field can be
@@ -25,3 +46,13 @@ python -m vgj_chat --index-path my.index --top-k 3
 ```
 
 Both methods may be combined; CLI options take precedence.
+
+## Development
+
+Run the helpers in the `Makefile` to format, lint and test the project:
+
+```bash
+make format  # run black and isort
+make lint    # run ruff
+make test    # run pytest
+```
