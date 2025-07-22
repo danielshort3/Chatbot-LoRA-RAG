@@ -71,6 +71,9 @@ Command-line overrides replace underscores with dashes, e.g.:
 python -m vgj_chat --hf-token <HF_TOKEN> --index-path my.index --top-k 3
 ```
 
+Debug logging is disabled by default. Enable it with `--debug true` or set
+`VGJ_DEBUG=true` in the environment.
+
 Both methods may be combined; CLI options take precedence.
 
 ## Development

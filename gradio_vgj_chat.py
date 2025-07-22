@@ -56,7 +56,7 @@ class Config:
 
     # misc
     cuda: bool = torch.cuda.is_available()
-    debug: bool = True
+    debug: bool = False
 
 
 CFG = Config()
