@@ -1,4 +1,4 @@
-FROM pytorch/pytorch:2.2.2-cuda12.1-cudnn8-runtime
+FROM pytorch/pytorch:2.2.2-cuda12.1-cudnn8-devel
 
 WORKDIR /app
 
@@ -13,7 +13,9 @@ COPY . .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir \
         faiss-gpu \
-        bitsandbytes && \
+        bitsandbytes \
+        accelerate \
+        git+https://github.com/huggingface/transformers.git && \
     pip install --no-cache-dir .
 
 RUN python scripts/crawl.py && \
