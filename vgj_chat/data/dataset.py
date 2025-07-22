@@ -7,10 +7,7 @@ import re
 from pathlib import Path
 
 import bs4
-import nltk
 import torch
-from datasets import load_dataset
-from sentence_transformers import SentenceTransformer
 from tqdm.auto import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
