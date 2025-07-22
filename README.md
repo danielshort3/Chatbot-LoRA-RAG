@@ -28,7 +28,7 @@ use the GPU when available.  The Docker image installs the
 CUDA-enabled `bitsandbytes` and `faiss-gpu` wheels.  If a matching wheel
 isn't available for your Python or CUDA version you will need the
 `cuda-toolkit` headers to compile them from source (e.g.
-`apt install cuda-toolkit-12-1`).
+`apt install cuda-toolkit-12-4`).
 
 ## Dependencies
 
@@ -60,7 +60,9 @@ will run the crawler and indexer so the demo is ready to launch:
 
 ```bash
 docker build -t vgj-chat .
-docker run -p 7860:7860 -e VGJ_HF_TOKEN=<token> vgj-chat
+# GPU acceleration requires the host to install the NVIDIA Container Toolkit
+# and have compatible NVIDIA drivers. Run the container with:
+docker run --gpus all -p 7860:7860 -e VGJ_HF_TOKEN=<token> vgj-chat
 ```
 
 ## Architecture
