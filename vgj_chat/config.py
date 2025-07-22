@@ -33,7 +33,7 @@ class Config:
 
     # misc
     cuda: bool = torch.cuda.is_available()
-    debug: bool = True
+    debug: bool = False
 
     # authentication
     hf_token: str | None = None

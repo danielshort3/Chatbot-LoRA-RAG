@@ -30,11 +30,20 @@ from ..data.io import load_index, load_metadata
 from .guards import too_similar
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(
-    format="%(asctime)s | %(levelname)-8s | %(message)s",
-    level=logging.DEBUG if CFG.debug else logging.INFO,
-    datefmt="%H:%M:%S",
-)
+
+
+def _configure_logging() -> None:
+    """Configure logging based on :data:`CFG.debug`."""
+    level = logging.DEBUG if CFG.debug else logging.INFO
+    logging.basicConfig(
+        format="%(asctime)s | %(levelname)-8s | %(message)s",
+        level=level,
+        datefmt="%H:%M:%S",
+    )
+    logger.setLevel(level)
+
+
+_configure_logging()
 
 
 # ---------------------------------------------------------------------------
