@@ -47,10 +47,16 @@ def build_index(
         if url.startswith("https://www.visitgrandjunction.com/blog/all-posts"):
             continue
         text = f.read_text()
-        for chunk in chunks(text):
-            vec = embedder.encode(
-                [chunk], convert_to_numpy=True, normalize_embeddings=True
-            )[0]
+        doc_chunks = list(chunks(text))
+        if not doc_chunks:
+            continue
+        vecs = embedder.encode(
+            doc_chunks,
+            convert_to_numpy=True,
+            normalize_embeddings=True,
+            show_progress_bar=False,
+        )
+        for chunk, vec in zip(doc_chunks, vecs):
             if index is None:
                 index = faiss.IndexFlatIP(vec.shape[0])
             index.add(vec.reshape(1, -1))
