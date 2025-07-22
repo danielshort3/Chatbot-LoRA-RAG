@@ -78,7 +78,28 @@ def _boot() -> tuple[
     return index, texts, urls, embedder, reranker, chat_pipe
 
 
-INDEX, TEXTS, URLS, EMBEDDER, RERANKER, CHAT = _boot()
+INDEX: faiss.Index | None = None
+TEXTS: list[str] | None = None
+URLS: list[str] | None = None
+EMBEDDER: SentenceTransformer | None = None
+RERANKER: CrossEncoder | None = None
+CHAT: pipeline | None = None
+_BOOTED = False
+
+
+def _ensure_boot() -> None:
+    """Boot the heavy resources on demand."""
+    global INDEX, TEXTS, URLS, EMBEDDER, RERANKER, CHAT, _BOOTED
+    if not _BOOTED:
+        (
+            INDEX,
+            TEXTS,
+            URLS,
+            EMBEDDER,
+            RERANKER,
+            CHAT,
+        ) = _boot()
+        _BOOTED = True
 
 
 # ---------------------------------------------------------------------------
@@ -86,6 +107,9 @@ INDEX, TEXTS, URLS, EMBEDDER, RERANKER, CHAT = _boot()
 # ---------------------------------------------------------------------------
 
 def retrieve_unique(query: str) -> List[Tuple[float, str, str]]:
+    _ensure_boot()
+    assert EMBEDDER and INDEX and TEXTS and URLS and RERANKER
+
     logger.debug("🔍 Query: %s", query)
 
     q_vec = EMBEDDER.encode(query, normalize_embeddings=True).astype("float32")[
@@ -120,6 +144,8 @@ def answer_stream(
     history: List[dict[str, str]],
 ) -> Generator[Tuple[List[dict[str, str]], List[dict[str, str]]], None, None]:
     """Stream a RAG-grounded answer for the Gradio UI."""
+    _ensure_boot()
+    assert CHAT and EMBEDDER
     user_q = history[-1]["content"]
 
     passages = retrieve_unique(user_q)
@@ -176,3 +202,34 @@ def answer_stream(
     )
     history[-1]["content"] = f"{final_answer}\n\n**Sources**\n{sources_md}"
     yield history, history
+
+
+def chat(question: str) -> str:
+    """Return a single answer string to *question*."""
+    _ensure_boot()
+    assert CHAT and EMBEDDER
+
+    passages = retrieve_unique(question)
+    if not passages:
+        return "Sorry, I couldn’t find anything relevant."
+
+    src_block = "\n\n".join(
+        f"[{i+1}] {url}\n{text}" for i, (_s, text, url) in enumerate(passages)
+    )
+    prompt = (
+        "Answer the *single* question below using only the listed sources. "
+        "Do not add additional questions, FAQs, or headings. "
+        "Cite each fact like [1].\n\n"
+        f"{src_block}\n\nQ: {question}\nA:"
+    )
+
+    generated = CHAT(prompt)[0]["generated_text"]
+    answer = generated[len(prompt) :].strip()
+
+    if too_similar(answer, passages, EMBEDDER, CFG.sim_threshold):
+        answer = "Sorry, the answer is too similar to the source material."
+
+    sources_md = "\n".join(
+        f"[{i+1}] {url}" for i, (_s, _t, url) in enumerate(passages)
+    )
+    return f"{answer}\n\n**Sources**\n{sources_md}"
