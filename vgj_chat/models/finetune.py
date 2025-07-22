@@ -18,7 +18,9 @@ from transformers import (
 from trl import SFTTrainer
 
 BASE_MODEL = "mistralai/Mistral-7B-Instruct-v0.2"
-COMBINED_QA_JL = "vgj_auto_dataset.jsonl"
+# dataset built by ``vgj_chat.data.dataset.build_auto_dataset``
+# combines manual and automatically generated Q&A pairs
+COMBINED_QA_JL = "vgj_combined.jsonl"
 CHECKPOINT_DIR = "lora-vgj-checkpoint"
 
 LORA_R = 16
