@@ -11,7 +11,13 @@ python -m vgj_chat --hf-token <HF_TOKEN>
 
 ## Quick start
 
-Create a local environment with [Hatch](https://hatch.pypa.io/) and run the demo:
+Create a local environment with [Hatch](https://hatch.pypa.io/) and run the demo.
+The default base model `mistralai/Mistral-7B-Instruct-v0.2` is gated on
+[Hugging Face](https://huggingface.co/). Request access on the model page and
+generate an access token from your account settings. Pass this token using the
+`--hf-token` command-line option or the `VGJ_HF_TOKEN` environment variable.
+
+Run the demo with:
 
 ```bash
 pipx run hatch env create
