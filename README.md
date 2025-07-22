@@ -6,7 +6,7 @@ organised as a Python package named `vgj_chat`.
 Launch the Gradio demo with:
 
 ```bash
-python -m vgj_chat
+python -m vgj_chat --hf-token <HF_TOKEN>
 ```
 
 ## Quick start
@@ -15,7 +15,7 @@ Create a local environment with [Hatch](https://hatch.pypa.io/) and run the demo
 
 ```bash
 pipx run hatch env create
-pipx run hatch run python -m vgj_chat
+pipx run hatch run python -m vgj_chat --hf-token <HF_TOKEN>
 ```
 
 ## Dependencies
@@ -57,7 +57,7 @@ Environment variables use upper-case field names, for example
 Command-line overrides replace underscores with dashes, e.g.:
 
 ```bash
-python -m vgj_chat --index-path my.index --top-k 3
+python -m vgj_chat --hf-token <HF_TOKEN> --index-path my.index --top-k 3
 ```
 
 Both methods may be combined; CLI options take precedence.
