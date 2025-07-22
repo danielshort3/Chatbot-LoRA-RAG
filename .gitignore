@@ -26,3 +26,8 @@ build/
 dist/
 *.egg-info/
 
+# Ignore runtime artifacts
+data/
+faiss.index
+meta.jsonl
+*.env
