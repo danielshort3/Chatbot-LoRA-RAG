@@ -7,6 +7,8 @@ from typing import List, Tuple
 
 import faiss  # type: ignore
 
+from ..config import CFG
+
 FAQ_RX = re.compile(r"^[QA]:", re.I)
 FOOTER_RX = re.compile(
     r"(visit\s+grand\s+junction\s+is|©|all\s+rights\s+reserved|privacy\s+policy)",
@@ -27,8 +29,18 @@ def clean(text: str) -> str:
 
 
 def load_index(path: Path) -> faiss.Index:
-    """Load a FAISS index from *path*."""
-    return faiss.read_index(str(path))
+    """Load a FAISS index from *path* using GPU when available."""
+
+    index = faiss.read_index(str(path))
+
+    if CFG.cuda and getattr(faiss, "get_num_gpus", lambda: 0)() > 0:
+        try:
+            res = faiss.StandardGpuResources()
+            index = faiss.index_cpu_to_gpu(res, 0, index)
+        except Exception:
+            pass
+
+    return index
 
 
 def load_metadata(path: Path) -> Tuple[List[str], List[str]]:

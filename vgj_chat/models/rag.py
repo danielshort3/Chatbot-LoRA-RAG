@@ -6,7 +6,15 @@ from typing import Generator, List, Tuple
 
 import faiss  # type: ignore
 import torch  # type: ignore
-from huggingface_hub import login
+
+try:
+    from huggingface_hub import login
+except Exception:  # pragma: no cover - fallback for tests
+
+    def login(*_a, **_k) -> None:
+        pass
+
+
 from peft import PeftModel  # type: ignore
 from sentence_transformers import CrossEncoder, SentenceTransformer
 from transformers import (
