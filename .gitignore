@@ -1,0 +1,28 @@
+# Ignore Visual Studio and development environment files
+.vs/
+.vscode/
+*.sln
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.VC.db
+*.cache
+*.csproj
+*.vcxproj
+*.pdb
+*.ipch
+*.dbmdl
+
+# Ignore Python cache and other temporary files
+__pycache__/
+*.py[cod]
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore build outputs
+build/
+dist/
+*.egg-info/
+
