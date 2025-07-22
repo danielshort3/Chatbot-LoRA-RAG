@@ -41,6 +41,13 @@ line_length = 88
 
 [tool.ruff]
 line-length = 88
+extend-exclude = [
+  "archive",
+  "scripts",
+  "gradio_vgj_chat.py",
+  "vgj_chat/data/*",
+  "vgj_chat/models/*",
+]
 
 [tool.pytest.ini_options]
 addopts = "-ra"
