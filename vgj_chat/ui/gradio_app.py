@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import gradio as gr
 
-from ..models.rag import answer_stream
+from ..models.rag import _ensure_boot, answer_stream
 
 
 def user_submit(msg: str, hist: list[dict[str, str]]):
@@ -14,6 +14,7 @@ page_title = "Unofficial Visit\u00a0Grand\u00a0Junction\u00a0Demo – not endors
 
 
 def build_demo() -> gr.Blocks:
+    _ensure_boot()
     with gr.Blocks(theme=gr.themes.Soft(), title=page_title) as demo:
         gr.Markdown(
             (
