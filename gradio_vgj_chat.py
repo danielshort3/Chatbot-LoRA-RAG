@@ -28,6 +28,8 @@ from transformers import (
     pipeline,
 )
 
+from vgj_chat.data.io import load_index
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 #  Configuration
@@ -106,7 +108,7 @@ def _boot() -> tuple[
     pipeline,
 ]:
     logger.info("Loading FAISS index and metadata …")
-    index: faiss.Index = faiss.read_index(str(CFG.index_path))
+    index: faiss.Index = load_index(CFG.index_path)
     raw_meta = [json.loads(l) for l in CFG.meta_path.read_text().splitlines()]
     texts = [_clean(m["text"]) for m in raw_meta]  # ← pre‑filter once
     urls = [m["url"] for m in raw_meta]
