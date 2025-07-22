@@ -56,3 +56,7 @@ make format  # run black and isort
 make lint    # run ruff
 make test    # run pytest
 ```
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
