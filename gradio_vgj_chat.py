@@ -132,7 +132,7 @@ def _boot() -> tuple[
         device_map="auto",
         torch_dtype=torch.float16,
     )
-    lora = PeftModel.from_pretrained(base, CFG.lora_dir)
+    lora = PeftModel.from_pretrained(base, str(CFG.lora_dir))
     merged = lora.merge_and_unload()
 
     chat_pipe = pipeline(
