@@ -18,6 +18,11 @@ pipx run hatch env create
 pipx run hatch run python -m vgj_chat
 ```
 
+## Dependencies
+
+The application requires `bitsandbytes` in addition to the standard
+dependencies listed in `pyproject.toml`.
+
 ## Docker
 
 A Dockerfile is provided for a fully containerised setup. Building the image
