@@ -1,4 +1,5 @@
 """Auto-generate Q&A pairs from crawled pages."""
+
 from __future__ import annotations
 
 import json
@@ -12,7 +13,6 @@ from datasets import load_dataset
 from sentence_transformers import SentenceTransformer
 from tqdm.auto import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-
 
 LLM_NAME = "mistralai/Mistral-7B-Instruct-v0.2"
 PARA_MAX = 3
@@ -40,6 +40,7 @@ llm = AutoModelForCausalLM.from_pretrained(
     device_map={"": 0},
 )
 
+
 def gen_question(passage: str) -> str:
     sys = (
         "You are a helpful travel assistant. Read the PASSAGE and invent one "
@@ -50,10 +51,13 @@ def gen_question(passage: str) -> str:
     ids = tok(prompt, return_tensors="pt").to(llm.device)
     with torch.no_grad():
         out = llm.generate(**ids, max_new_tokens=40, pad_token_id=tok.eos_token_id)[0]
-    q = tok.decode(out[ids.input_ids.shape[-1]:], skip_special_tokens=True).strip()
+    q = tok.decode(out[ids.input_ids.shape[-1] :], skip_special_tokens=True).strip()
     return q if q.endswith("?") else q + "?"
 
-BOILER_PAT = re.compile(r"(click here|minute read|photo credit|browser is not supported)", re.I)
+
+BOILER_PAT = re.compile(
+    r"(click here|minute read|photo credit|browser is not supported)", re.I
+)
 
 
 def build_auto_dataset() -> None:
@@ -74,7 +78,8 @@ def build_auto_dataset() -> None:
         for p in paras:
             if words + len(p.split()) > ANSWER_TOK_CAP:
                 break
-            answer_words.extend(p.split()); words += len(p.split())
+            answer_words.extend(p.split())
+            words += len(p.split())
         answer = " ".join(answer_words) or paras[0]
         if BOILER_PAT.search(answer):
             skipped += 1
@@ -87,4 +92,3 @@ def build_auto_dataset() -> None:
         for src in (MANUAL_QA_JL, AUTO_QA_JL):
             if src.exists():
                 out.writelines(src.open())
-

@@ -1,23 +1,23 @@
 """Utilities to chunk HTML text and build a FAISS index."""
+
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Iterable
 
-import json
 import faiss  # type: ignore
 import nltk
 from sentence_transformers import SentenceTransformer
 from tqdm.auto import tqdm
 
-
-
-
 CHUNK_TOKENS = 200
 OVERLAP_TOKENS = 40
 
 
-def chunks(text: str, max_tok: int = CHUNK_TOKENS, ov: int = OVERLAP_TOKENS) -> Iterable[str]:
+def chunks(
+    text: str, max_tok: int = CHUNK_TOKENS, ov: int = OVERLAP_TOKENS
+) -> Iterable[str]:
     """Yield sentence-overlapping chunks of roughly ``max_tok`` words."""
     sents = nltk.sent_tokenize(text)
     buf: list[str] = []
@@ -34,7 +34,9 @@ def chunks(text: str, max_tok: int = CHUNK_TOKENS, ov: int = OVERLAP_TOKENS) -> 
         yield " ".join(buf)
 
 
-def build_index(txt_dir: Path, index_path: Path, meta_path: Path, embed_model: str) -> None:
+def build_index(
+    txt_dir: Path, index_path: Path, meta_path: Path, embed_model: str
+) -> None:
     """Chunk ``txt_dir`` and build a FAISS index + metadata file."""
     embedder = SentenceTransformer(embed_model)
     index = None
@@ -46,7 +48,9 @@ def build_index(txt_dir: Path, index_path: Path, meta_path: Path, embed_model: s
             continue
         text = f.read_text()
         for chunk in chunks(text):
-            vec = embedder.encode([chunk], convert_to_numpy=True, normalize_embeddings=True)[0]
+            vec = embedder.encode(
+                [chunk], convert_to_numpy=True, normalize_embeddings=True
+            )[0]
             if index is None:
                 index = faiss.IndexFlatIP(vec.shape[0])
             index.add(vec.reshape(1, -1))

@@ -9,16 +9,17 @@ from __future__ import annotations
 import json
 import logging
 import re
+import threading  # NEW
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Tuple
-import threading                    # NEW
 
-import faiss                     # type: ignore
+import faiss  # type: ignore
 import gradio as gr
-import numpy as np               # type: ignore
-import torch                     # type: ignore
-from sentence_transformers import SentenceTransformer, CrossEncoder
+import numpy as np  # type: ignore
+import torch  # type: ignore
+from peft import PeftModel  # type: ignore
+from sentence_transformers import CrossEncoder, SentenceTransformer
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -26,7 +27,7 @@ from transformers import (
     TextIteratorStreamer,
     pipeline,
 )
-from peft import PeftModel       # type: ignore
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 #  Configuration
@@ -35,16 +36,16 @@ from peft import PeftModel       # type: ignore
 class Config:
     # paths
     index_path: Path = Path("faiss.index")
-    meta_path:  Path = Path("meta.jsonl")
-    lora_dir:   Path = Path("lora-vgj-checkpoint")
+    meta_path: Path = Path("meta.jsonl")
+    lora_dir: Path = Path("lora-vgj-checkpoint")
 
     # models
-    base_model:   str = "mistralai/Mistral-7B-Instruct-v0.2"
-    embed_model:  str = "sentence-transformers/all-MiniLM-L6-v2"
+    base_model: str = "mistralai/Mistral-7B-Instruct-v0.2"
+    embed_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     rerank_model: str = "BAAI/bge-reranker-base"
 
     # RAG settings
-    top_k: int      = 5
+    top_k: int = 5
     score_min: float = 0.0
     max_new_tokens: int = 512
 
@@ -52,7 +53,7 @@ class Config:
     sim_threshold: float = 0.80
 
     # misc
-    cuda: bool  = torch.cuda.is_available()
+    cuda: bool = torch.cuda.is_available()
     debug: bool = True
 
 
@@ -71,7 +72,7 @@ logger = logging.getLogger("vgj_chat")
 # ──────────────────────────────────────────────────────────────────────────────
 #  Boiler‑plate & FAQ stripping helpers
 # ──────────────────────────────────────────────────────────────────────────────
-FAQ_RX   = re.compile(r"^[QA]:", re.I)
+FAQ_RX = re.compile(r"^[QA]:", re.I)
 FOOTER_RX = re.compile(
     r"(visit\s+grand\s+junction\s+is|©|all\s+rights\s+reserved|privacy\s+policy)",
     re.I,
@@ -107,8 +108,8 @@ def _boot() -> tuple[
     logger.info("Loading FAISS index and metadata …")
     index: faiss.Index = faiss.read_index(str(CFG.index_path))
     raw_meta = [json.loads(l) for l in CFG.meta_path.read_text().splitlines()]
-    texts = [_clean(m["text"]) for m in raw_meta]      # ← pre‑filter once
-    urls  = [m["url"] for m in raw_meta]
+    texts = [_clean(m["text"]) for m in raw_meta]  # ← pre‑filter once
+    urls = [m["url"] for m in raw_meta]
 
     device = "cuda" if CFG.cuda else "cpu"
     logger.info("Initialising embedding & re‑rank models …")
@@ -124,8 +125,10 @@ def _boot() -> tuple[
     )
     tokenizer = AutoTokenizer.from_pretrained(CFG.base_model, use_fast=True)
     base = AutoModelForCausalLM.from_pretrained(
-        CFG.base_model, quantization_config=quant_cfg,
-        device_map="auto", torch_dtype=torch.float16,
+        CFG.base_model,
+        quantization_config=quant_cfg,
+        device_map="auto",
+        torch_dtype=torch.float16,
     )
     lora = PeftModel.from_pretrained(base, CFG.lora_dir)
     merged = lora.merge_and_unload()
@@ -144,10 +147,13 @@ def _boot() -> tuple[
 
 INDEX, TEXTS, URLS, EMBEDDER, RERANKER, CHAT = _boot()
 
+
 # ──────────────────────────────────────────────────────────────────────────────
 #  Retrieval
 # ──────────────────────────────────────────────────────────────────────────────
 def _retrieve_unique(query: str) -> List[Tuple[float, str, str]]:
+    """Return the top-K unique passages for *query* sorted by score."""
+
     logger.debug("🔍 Query: %s", query)
 
     q_vec = EMBEDDER.encode(query, normalize_embeddings=True).astype("float32")[None, :]
@@ -182,17 +188,18 @@ def _too_similar(answer: str, passages: List[Tuple[float, str, str]]) -> bool:
     Returns True if the generated answer overlaps too closely
     with any retrieved passage (cosine ≥ threshold).
     """
-    ans_vec = EMBEDDER.encode(
-        answer, normalize_embeddings=True
-    ).astype("float32")
+    ans_vec = EMBEDDER.encode(answer, normalize_embeddings=True).astype("float32")
     for score, text, _url in passages:
-        src_vec = EMBEDDER.encode(
-            text[:512], normalize_embeddings=True
-        ).astype("float32")           # small slice
-        cos_sim = float(np.dot(ans_vec, src_vec))      # because both are unit vectors
+        src_vec = EMBEDDER.encode(text[:512], normalize_embeddings=True).astype(
+            "float32"
+        )  # small slice
+        cos_sim = float(np.dot(ans_vec, src_vec))  # because both are unit vectors
         if cos_sim >= CFG.sim_threshold:
-            logger.warning("Similarity %.2f ≥ %.2f – refusing/paraphrasing.",
-                           cos_sim, CFG.sim_threshold)
+            logger.warning(
+                "Similarity %.2f ≥ %.2f – refusing/paraphrasing.",
+                cos_sim,
+                CFG.sim_threshold,
+            )
             return True
     return False
 
@@ -211,16 +218,17 @@ def _answer_stream(history: list[dict[str, str]]):
     passages = _retrieve_unique(user_q)
     if not passages:
         history.append(
-            {"role": "assistant",
-             "content": "Sorry, I couldn’t find anything relevant."}
+            {
+                "role": "assistant",
+                "content": "Sorry, I couldn’t find anything relevant.",
+            }
         )
         yield history, history
         return
 
     # ---------------- RAG prompt ----------------
     src_block = "\n\n".join(
-        f"[{i+1}] {url}\n{text}"
-        for i, (_s, text, url) in enumerate(passages)
+        f"[{i+1}] {url}\n{text}" for i, (_s, text, url) in enumerate(passages)
     )
     prompt = (
         "Answer the *single* question below using only the listed sources. "
@@ -230,15 +238,13 @@ def _answer_stream(history: list[dict[str, str]]):
     )
 
     # ---------------- streaming generation ----------------
-    tok    = CHAT.tokenizer
-    model  = CHAT.model
+    tok = CHAT.tokenizer
+    model = CHAT.model
     inputs = tok(prompt, return_tensors="pt").to(model.device)
-    if "attention_mask" not in inputs:            # safety for some HF builds
+    if "attention_mask" not in inputs:  # safety for some HF builds
         inputs["attention_mask"] = torch.ones_like(inputs["input_ids"])
 
-    streamer = TextIteratorStreamer(
-        tok, skip_prompt=True, skip_special_tokens=False
-    )
+    streamer = TextIteratorStreamer(tok, skip_prompt=True, skip_special_tokens=False)
     threading.Thread(
         target=model.generate,
         kwargs=dict(
@@ -257,16 +263,14 @@ def _answer_stream(history: list[dict[str, str]]):
     for token in streamer:
         partial += token
         history[-1]["content"] = partial
-        yield history, history                       # live update
+        yield history, history  # live update
 
     final_answer = history[-1]["content"].strip()
 
     # ---------------- append sources ----------------
-    sources_md = "\n".join(
-        f"[{i+1}] {url}" for i, (_s, _t, url) in enumerate(passages)
-    )
+    sources_md = "\n".join(f"[{i+1}] {url}" for i, (_s, _t, url) in enumerate(passages))
     history[-1]["content"] = f"{final_answer}\n\n**Sources**\n{sources_md}"
-    yield history, history                           # final, complete message
+    yield history, history  # final, complete message
 
 
 def _user_submit(msg: str, hist: List[dict[str, str]]) -> tuple[str, list]:
@@ -279,8 +283,8 @@ def _user_submit(msg: str, hist: List[dict[str, str]]) -> tuple[str, list]:
 #  Gradio UI
 # ──────────────────────────────────────────────────────────────────────────────
 page_title = (
-    "Unofficial Visit Grand Junction Demo – not endorsed by VGJ"
-)  # <title> element
+    "Unofficial Visit Grand Junction Demo – not endorsed by VGJ"  # <title> element
+)
 
 with gr.Blocks(theme=gr.themes.Soft(), title=page_title) as demo:
     gr.Markdown(
@@ -305,7 +309,7 @@ with gr.Blocks(theme=gr.themes.Soft(), title=page_title) as demo:
         inputs=[textbox, chat_state],
         outputs=[textbox, chat_state],
     ).then(
-        _answer_stream,          # generator streams tokens
+        _answer_stream,  # generator streams tokens
         inputs=[chat_state],
         outputs=[chatbox, chat_state],
     )

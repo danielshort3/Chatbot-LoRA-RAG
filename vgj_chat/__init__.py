@@ -8,4 +8,5 @@ def chat(question: str) -> str:
     """Return an answer to *question* using the RAG model."""
     return rag.chat(question)
 
+
 __all__ = ["CFG", "chat"]
