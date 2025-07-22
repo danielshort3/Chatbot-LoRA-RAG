@@ -18,6 +18,16 @@ pipx run hatch env create
 pipx run hatch run python -m vgj_chat
 ```
 
+## Docker
+
+A Dockerfile is provided for a fully containerised setup. Building the image
+will run the crawler and indexer so the demo is ready to launch:
+
+```bash
+docker build -t vgj-chat .
+docker run -p 7860:7860 vgj-chat
+```
+
 ## Architecture
 
 ```
