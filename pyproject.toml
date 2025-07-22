@@ -21,6 +21,10 @@ dependencies = [
     "nltk",
     "tqdm",
     "numpy",
+    "aiohttp",
+    "requests",
+    "beautifulsoup4",
+    "lxml",
 ]
 
 [project.optional-dependencies]
