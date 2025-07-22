@@ -43,6 +43,3 @@ def build_demo() -> gr.Blocks:
             outputs=[chatbox, chat_state],
         )
     return demo
-
-
-demo = build_demo()
