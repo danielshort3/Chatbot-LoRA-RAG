@@ -9,12 +9,6 @@ COPY . .
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir .
 
-RUN python - <<'EOF'
-import nltk
-nltk.download('punkt', quiet=True)
-nltk.download('punkt_tab', quiet=True)
-EOF
-
 RUN python scripts/crawl.py && \
     python scripts/build_index.py
 
