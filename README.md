@@ -23,11 +23,16 @@ Run the demo with:
 pipx run hatch env create
 pipx run hatch run python -m vgj_chat --hf-token <HF_TOKEN>
 ```
+The environment installs the GPU-enabled FAISS package so the demo can
+use the GPU when available.
 
 ## Dependencies
 
-The application requires `bitsandbytes` and `faiss-gpu` in addition to the
-standard dependencies listed in `pyproject.toml`.
+The application requires `bitsandbytes` and the GPU-enabled `faiss-gpu`
+package in addition to the standard dependencies listed in `pyproject.toml`.
+
+FAISS will automatically use the GPU whenever `torch.cuda.is_available()` is
+true or when the `--cuda` option is passed; otherwise it falls back to the CPU.
 
 ## Docker
 
