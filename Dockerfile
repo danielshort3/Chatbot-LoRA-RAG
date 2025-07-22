@@ -3,23 +3,20 @@ FROM pytorch/pytorch:2.2.2-cuda12.1-cudnn8-devel
 WORKDIR /app
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        build-essential \
-        git && \
+    apt-get install -y --no-install-recommends git && \
     rm -rf /var/lib/apt/lists/*
 
-COPY . .
-
+# ----- dependency layer -----
+COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir \
-        faiss-gpu \
-        bitsandbytes \
-        accelerate \
-        git+https://github.com/huggingface/transformers.git && \
-    pip install --no-cache-dir .
+    pip install --no-cache-dir -r requirements.txt
 
-RUN python scripts/crawl.py && \
-    python scripts/build_index.py
+# ----- source code -----
+COPY . .
+RUN pip install --no-cache-dir .
+
+# Optionally run your data/index creation here,
+# or leave it to entrypoint/startup.
 
 EXPOSE 7860
 CMD ["python", "-m", "vgj_chat"]

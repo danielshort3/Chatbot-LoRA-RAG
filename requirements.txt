@@ -1,0 +1,4 @@
+faiss-gpu-cu12==1.8.0.2
+bitsandbytes==0.44.1
+accelerate==0.29.3
+git+https://github.com/huggingface/transformers.git@v4.42.1
