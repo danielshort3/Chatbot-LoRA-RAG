@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields, replace
 from pathlib import Path
+import os
+import argparse
 import torch
 
 @dataclass(frozen=True)
@@ -30,5 +32,50 @@ class Config:
     cuda: bool = torch.cuda.is_available()
     debug: bool = True
 
+    @staticmethod
+    def _convert(value: str, typ: type):
+        """Convert *value* to *typ* for overrides."""
+        if typ is bool:
+            return value.lower() in {"1", "true", "yes", "on"}
+        if typ is int:
+            return int(value)
+        if typ is float:
+            return float(value)
+        if typ is Path:
+            return Path(value)
+        return value
 
-CFG = Config()
+    @classmethod
+    def from_env(cls) -> "Config":
+        """Create config using environment variables prefixed with ``VGJ_``."""
+        defaults = cls()
+        updates = {}
+        for f in fields(cls):
+            env_name = f"VGJ_{f.name.upper()}"
+            if env_name in os.environ:
+                updates[f.name] = cls._convert(os.environ[env_name], f.type)
+        return replace(defaults, **updates)
+
+    def apply_cli_args(self, args: argparse.Namespace) -> "Config":
+        """Return a new config overriding with parsed command-line arguments."""
+        updates = {}
+        for f in fields(self):
+            val = getattr(args, f.name, None)
+            if val is not None:
+                updates[f.name] = self._convert(val, f.type)
+        return replace(self, **updates)
+
+    @classmethod
+    def add_argparse_args(cls, parser: argparse.ArgumentParser) -> None:
+        """Add command-line arguments for all config fields."""
+        for f in fields(cls):
+            parser.add_argument(
+                f"--{f.name.replace('_', '-')}",
+                dest=f.name,
+                type=str,
+                help=f"Override {f.name} (default: %(default)s)",
+                default=None,
+            )
+
+
+CFG = Config.from_env()
