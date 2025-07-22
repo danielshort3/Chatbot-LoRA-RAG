@@ -7,7 +7,6 @@ from typing import List, Tuple
 
 import faiss  # type: ignore
 
-
 FAQ_RX = re.compile(r"^[QA]:", re.I)
 FOOTER_RX = re.compile(
     r"(visit\s+grand\s+junction\s+is|©|all\s+rights\s+reserved|privacy\s+policy)",

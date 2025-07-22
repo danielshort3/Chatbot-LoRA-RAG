@@ -6,6 +6,7 @@ from typing import Generator, List, Tuple
 
 import faiss  # type: ignore
 import torch  # type: ignore
+from peft import PeftModel  # type: ignore
 from sentence_transformers import CrossEncoder, SentenceTransformer
 from transformers import (
     AutoModelForCausalLM,
@@ -14,7 +15,6 @@ from transformers import (
     TextIteratorStreamer,
     pipeline,
 )
-from peft import PeftModel  # type: ignore
 
 from ..config import CFG
 from ..data.io import load_index, load_metadata
@@ -31,6 +31,7 @@ logging.basicConfig(
 # ---------------------------------------------------------------------------
 # resource initialisation
 # ---------------------------------------------------------------------------
+
 
 def _boot() -> tuple[
     faiss.Index,
@@ -106,15 +107,16 @@ def _ensure_boot() -> None:
 # retrieval
 # ---------------------------------------------------------------------------
 
+
 def retrieve_unique(query: str) -> List[Tuple[float, str, str]]:
+    """Return the top-K unique passages for *query* sorted by score."""
+
     _ensure_boot()
     assert EMBEDDER and INDEX and TEXTS and URLS and RERANKER
 
     logger.debug("🔍 Query: %s", query)
 
-    q_vec = EMBEDDER.encode(query, normalize_embeddings=True).astype("float32")[
-        None, :
-    ]
+    q_vec = EMBEDDER.encode(query, normalize_embeddings=True).astype("float32")[None, :]
     _d, idx = INDEX.search(q_vec, 100)
 
     candidates = [(TEXTS[i], URLS[i]) for i in idx[0]]
@@ -140,6 +142,7 @@ def retrieve_unique(query: str) -> List[Tuple[float, str, str]]:
 # generation
 # ---------------------------------------------------------------------------
 
+
 def answer_stream(
     history: List[dict[str, str]],
 ) -> Generator[Tuple[List[dict[str, str]], List[dict[str, str]]], None, None]:
@@ -151,7 +154,10 @@ def answer_stream(
     passages = retrieve_unique(user_q)
     if not passages:
         history.append(
-            {"role": "assistant", "content": "Sorry, I couldn’t find anything relevant."}
+            {
+                "role": "assistant",
+                "content": "Sorry, I couldn’t find anything relevant.",
+            }
         )
         yield history, history
         return
@@ -197,9 +203,7 @@ def answer_stream(
     if too_similar(final_answer, passages, EMBEDDER, CFG.sim_threshold):
         final_answer = "Sorry, the answer is too similar to the source material."
 
-    sources_md = "\n".join(
-        f"[{i+1}] {url}" for i, (_s, _t, url) in enumerate(passages)
-    )
+    sources_md = "\n".join(f"[{i+1}] {url}" for i, (_s, _t, url) in enumerate(passages))
     history[-1]["content"] = f"{final_answer}\n\n**Sources**\n{sources_md}"
     yield history, history
 
@@ -229,7 +233,5 @@ def chat(question: str) -> str:
     if too_similar(answer, passages, EMBEDDER, CFG.sim_threshold):
         answer = "Sorry, the answer is too similar to the source material."
 
-    sources_md = "\n".join(
-        f"[{i+1}] {url}" for i, (_s, _t, url) in enumerate(passages)
-    )
+    sources_md = "\n".join(f"[{i+1}] {url}" for i, (_s, _t, url) in enumerate(passages))
     return f"{answer}\n\n**Sources**\n{sources_md}"

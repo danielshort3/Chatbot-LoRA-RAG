@@ -1,8 +1,8 @@
 import time
 from contextlib import suppress
 
-from vgj_chat.ui import gradio_app
 from vgj_chat.models import rag
+from vgj_chat.ui import gradio_app
 
 
 def test_gradio_launch(monkeypatch):

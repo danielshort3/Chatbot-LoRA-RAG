@@ -1,4 +1,5 @@
 """Async web crawler for collecting VGJ content."""
+
 from __future__ import annotations
 
 import asyncio
@@ -48,31 +49,42 @@ USER_AGENTS = [
 
 HASH_DB = json.loads(HASH_RECORDS.read_text()) if HASH_RECORDS.exists() else {}
 
+
 def upsert_hash(url: str, h: str) -> None:
     HASH_DB[url] = h
     HASH_RECORDS.write_text(json.dumps(HASH_DB))
+
 
 class RateLimiter:
     def __init__(self, delay: float):
         self.delay = delay
         self.next_ts = 0.0
         self.lock = asyncio.Lock()
+
     async def __aenter__(self) -> None:
         async with self.lock:
             await asyncio.sleep(max(0.0, self.next_ts - time.time()))
             self.next_ts = time.time() + self.delay
+
     async def __aexit__(self, *_exc: object) -> None:
         return None
+
 
 def robots_disallow(domain: str) -> list[str]:
     try:
         txt = requests.get(f"https://{domain}/robots.txt", timeout=10).text.lower()
-        return [l.split(":",1)[1].strip() for l in txt.splitlines() if l.startswith("disallow")]
+        return [
+            l.split(":", 1)[1].strip()
+            for l in txt.splitlines()
+            if l.startswith("disallow")
+        ]
     except Exception:
         return []
 
+
 def internal_set(base: str, extra: list[str]) -> set[str]:
     return {urlparse(base).netloc, *extra}
+
 
 def allowed(url: str, nets: set[str], dis_map: dict[str, list[str]]) -> bool:
     p = urlparse(url)
@@ -82,43 +94,61 @@ def allowed(url: str, nets: set[str], dis_map: dict[str, list[str]]) -> bool:
         return False
     return not any(url.startswith(path) for path in dis_map.get(p.netloc, []))
 
+
 async def sitemap_seed(base: str, nets: set[str]) -> list[str]:
     try:
-        r = requests.get(f"{base}/sitemap.xml", timeout=15); r.raise_for_status()
+        r = requests.get(f"{base}/sitemap.xml", timeout=15)
+        r.raise_for_status()
         locs = re.findall(r"<loc>(.*?)</loc>", r.text)
         return [u for u in locs if allowed(u, nets, {})]
     except Exception:
         return []
 
-async def fetch(session: aiohttp.ClientSession, url: str, rl: RateLimiter) -> tuple[str|None, bytes]:
+
+async def fetch(
+    session: aiohttp.ClientSession, url: str, rl: RateLimiter
+) -> tuple[str | None, bytes]:
     for attempt in range(MAX_RETRIES):
         try:
             async with rl:
                 async with session.get(url, timeout=20) as r:
                     r.raise_for_status()
-                    mime = r.headers.get("content-type","text/html").split(";")[0]
+                    mime = r.headers.get("content-type", "text/html").split(";")[0]
                     return mime, await r.read()
         except Exception:
             await asyncio.sleep(BACKOFF_FACTOR * attempt)
     return None, b""
 
-async def worker(name: str, idx: int, session: aiohttp.ClientSession, q: asyncio.Queue[str], seen: set[str], delay: float, nets: set[str], dis: dict[str,list[str]]) -> None:
+
+async def worker(
+    name: str,
+    idx: int,
+    session: aiohttp.ClientSession,
+    q: asyncio.Queue[str],
+    seen: set[str],
+    delay: float,
+    nets: set[str],
+    dis: dict[str, list[str]],
+) -> None:
     rl = RateLimiter(delay)
-    bar = tqdm(total=0, position=idx+1, desc=name, unit="pg", leave=True)
+    bar = tqdm(total=0, position=idx + 1, desc=name, unit="pg", leave=True)
     while True:
-        url = await q.get(); q.task_done()
+        url = await q.get()
+        q.task_done()
         if url in seen:
             continue
         seen.add(url)
         bar.set_description(f"{name} {url}")
         mime, body = await fetch(session, url, rl)
         if not body:
-            bar.update(); continue
+            bar.update()
+            continue
         uid = hashlib.md5(url.encode()).hexdigest()
         if mime != "text/html":
             ext = mimetypes.guess_extension(mime) or ".bin"
             (MIME_DIR / f"{uid}{ext}").write_bytes(body)
-            bar.update(); continue
+            bar.update()
+            continue
         soup = bs4.BeautifulSoup(body, "lxml")
         text = soup.get_text(" ", strip=True)
         if text:
@@ -132,12 +162,14 @@ async def worker(name: str, idx: int, session: aiohttp.ClientSession, q: asyncio
                 q.put_nowait(link)
         bar.update()
 
+
 async def crawl(seed: list[str]) -> None:
     if not seed:
         raise ValueError("Seed list empty – nothing to crawl.")
     nets = internal_set(BASE_URL, ADDITIONAL_DOMAINS)
-    dis  = {n: robots_disallow(n) for n in nets}
-    q: asyncio.Queue[str] = asyncio.Queue(); [q.put_nowait(u) for u in seed]
+    dis = {n: robots_disallow(n) for n in nets}
+    q: asyncio.Queue[str] = asyncio.Queue()
+    [q.put_nowait(u) for u in seed]
     seen: set[str] = set()
     headers = {
         "User-Agent": random.choice(USER_AGENTS),
@@ -148,7 +180,12 @@ async def crawl(seed: list[str]) -> None:
         "Connection": "keep-alive",
     }
     async with aiohttp.ClientSession(headers=headers) as session:
-        tasks = [asyncio.create_task(worker(f"w{i}", i, session, q, seen, CRAWL_DELAY, nets, dis)) for i in range(N_WORKERS)]
+        tasks = [
+            asyncio.create_task(
+                worker(f"w{i}", i, session, q, seen, CRAWL_DELAY, nets, dis)
+            )
+            for i in range(N_WORKERS)
+        ]
         await q.join()
         for t in tasks:
             t.cancel()
