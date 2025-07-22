@@ -15,8 +15,5 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY . .
 RUN pip install --no-cache-dir .
 
-# Optionally run your data/index creation here,
-# or leave it to entrypoint/startup.
-
-EXPOSE 7860
-CMD ["python", "-m", "vgj_chat"]
+RUN python scripts/crawl.py && \
+    python scripts/build_index.py
