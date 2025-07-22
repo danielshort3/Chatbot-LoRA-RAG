@@ -153,6 +153,7 @@ async def worker(
         text = soup.get_text(" ", strip=True)
         if text:
             (DATA_DIR_TXT / f"{uid}.txt").write_text(text)
+            (DATA_DIR_TXT / f"{uid}.url").write_text(url)
             (RAW_HTML_DIR / f"{uid}.html").write_bytes(body)
         else:
             (NO_TEXT_HTML_DIR / f"{uid}.html").write_bytes(body)
