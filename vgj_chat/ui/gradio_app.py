@@ -10,7 +10,7 @@ def user_submit(msg: str, hist: list[dict[str, str]]):
     return "", hist
 
 
-page_title = "Unofficial Visit\u00a0Grand\u00a0Junction\u00a0Demo – not endorsed by VGJ"
+page_title = "Unofficial Visit Grand Junction Demo – not endorsed by VGJ"
 
 
 def build_demo() -> gr.Blocks:
@@ -18,8 +18,8 @@ def build_demo() -> gr.Blocks:
     with gr.Blocks(theme=gr.themes.Soft(), title=page_title) as demo:
         gr.Markdown(
             (
-                "## \ud83d\udcac Unofficial Visit\u202fGrand\u202fJunction\u202fDemo Chatbot\n"
-                "<small>Portfolio prototype, **not** endorsed by Visit\u202fGrand\u202fJunction. "
+                "##Unofficial Visit Grand Junction Demo Chatbot\n"
+                "<small>Portfolio prototype, **not** endorsed by Visit Grand Junction. "
                 "Content sourced from public VGJ blogs under a fair-use rationale.</small>"
             )
         )
