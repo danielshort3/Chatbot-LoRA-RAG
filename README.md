@@ -25,14 +25,14 @@ pipx run hatch run python -m vgj_chat --hf-token <HF_TOKEN>
 ```
 The environment installs the GPU-enabled FAISS package so the demo can
 use the GPU when available.  The Docker image installs the
-CUDA-enabled `bitsandbytes` and `faiss-gpu` wheels.  If a matching wheel
+CUDA-enabled `bitsandbytes` and `faiss-gpu-cu12` wheels.  If a matching wheel
 isn't available for your Python or CUDA version you will need the
 `cuda-toolkit` headers to compile them from source (e.g.
 `apt install cuda-toolkit-12-1`).
 
 ## Dependencies
 
-The application requires `bitsandbytes` and the GPU-enabled `faiss-gpu`
+The application requires `bitsandbytes` and the GPU-enabled `faiss-gpu-cu12`
 package in addition to the standard dependencies listed in `pyproject.toml`.
 
 FAISS will automatically use the GPU whenever `torch.cuda.is_available()` is
