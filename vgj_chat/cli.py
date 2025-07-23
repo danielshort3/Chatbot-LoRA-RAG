@@ -17,7 +17,7 @@ def main(argv: list[str] | None = None) -> None:
 
     demo = build_demo()
     demo.queue()
-    demo.launch()
+    demo.launch(share=True, server_name="0.0.0.0")
 
 
 if __name__ == "__main__":  # pragma: no cover
