@@ -45,7 +45,7 @@ application on the GPU.
 Run the helper scripts in order to create the training data, fine‑tune the
 LoRA adapter and start the chat demo:
 
-1. `python scripts/crawl.py`
+1. `python scripts/crawl.py` (pass `--max-pages 20` to limit the crawl for debug)
 2. `python scripts/build_index.py`
 3. `python scripts/build_dataset.py`
 4. `python scripts/finetune.py`
