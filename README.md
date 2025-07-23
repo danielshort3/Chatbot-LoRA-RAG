@@ -60,6 +60,9 @@ A Dockerfile is provided for a fully containerised setup. The image
 uses the PyTorch 2.7.1 base with CUDA 12.8 and cuDNN 9. Building it will
 run the crawler and indexer so the demo is ready to launch:
 
+The image also installs `build-essential` so a C/C++ compiler is available for
+dependencies like `bitsandbytes` and the Triton runtime.
+
 ```bash
 docker build -t vgj-chat .
 # GPU acceleration requires the host to install the NVIDIA Container Toolkit
