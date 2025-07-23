@@ -154,25 +154,27 @@ def _load_baseline_chat() -> pipeline:
     )
 
 
+_RETRIEVAL_DISABLED = False
+
+
 @contextmanager
 def _baseline_mode() -> Generator[None, None, None]:
     """Temporarily disable retrieval and LoRA for a baseline generation."""
 
-    global CHAT, INDEX, TEXTS, URLS, EMBEDDER, RERANKER, BASELINE_CHAT
-
-    _ensure_boot()
+    global CHAT, INDEX, TEXTS, URLS, EMBEDDER, RERANKER, BASELINE_CHAT, _RETRIEVAL_DISABLED
 
     if BASELINE_CHAT is None:
         BASELINE_CHAT = _load_baseline_chat()
 
-    old_values = (CHAT, INDEX, TEXTS, URLS, EMBEDDER, RERANKER)
+    old_values = (CHAT, INDEX, TEXTS, URLS, EMBEDDER, RERANKER, _RETRIEVAL_DISABLED)
     CHAT = BASELINE_CHAT
     INDEX = TEXTS = URLS = EMBEDDER = RERANKER = None
+    _RETRIEVAL_DISABLED = True
 
     try:
         yield
     finally:
-        (CHAT, INDEX, TEXTS, URLS, EMBEDDER, RERANKER) = old_values
+        (CHAT, INDEX, TEXTS, URLS, EMBEDDER, RERANKER, _RETRIEVAL_DISABLED) = old_values
 
 
 # ---------------------------------------------------------------------------
@@ -182,6 +184,9 @@ def _baseline_mode() -> Generator[None, None, None]:
 
 def retrieve_unique(query: str) -> List[Tuple[float, str, str]]:
     """Return the top-K unique passages for *query* sorted by score."""
+
+    if _RETRIEVAL_DISABLED:
+        return []
 
     _ensure_boot()
     assert EMBEDDER and INDEX and TEXTS and URLS and RERANKER
