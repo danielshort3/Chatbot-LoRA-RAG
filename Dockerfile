@@ -16,7 +16,8 @@ COPY . .
 RUN pip install --no-cache-dir .
 
 RUN python scripts/crawl.py --limit 20 && \
-    python scripts/build_index.py --limit 20
+    python scripts/build_index.py --limit 20 
+
 
 EXPOSE 7860
 CMD ["python", "-m", "vgj_chat"]
