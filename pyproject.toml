@@ -26,6 +26,7 @@ dependencies = [
     "requests",
     "beautifulsoup4",
     "lxml",
+    "trafilatura",
 ]
 
 [project.optional-dependencies]
