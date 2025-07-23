@@ -14,6 +14,7 @@ from urllib.parse import urldefrag, urljoin, urlparse
 
 import aiohttp
 import bs4
+import trafilatura
 import requests
 from tqdm.auto import tqdm
 
@@ -48,6 +49,10 @@ USER_AGENTS = [
 ]
 
 HASH_DB = json.loads(HASH_RECORDS.read_text()) if HASH_RECORDS.exists() else {}
+
+
+def sha256(b: bytes) -> str:
+    return hashlib.sha256(b).hexdigest()
 
 
 def upsert_hash(url: str, h: str) -> None:
@@ -143,6 +148,11 @@ async def worker(
         if not body:
             bar.update()
             continue
+        sha = sha256(body)
+        if HASH_DB.get(url) == sha:
+            bar.update()
+            continue
+        upsert_hash(url, sha)
         uid = hashlib.md5(url.encode()).hexdigest()
         if mime != "text/html":
             ext = mimetypes.guess_extension(mime) or ".bin"
@@ -150,13 +160,15 @@ async def worker(
             bar.update()
             continue
         soup = bs4.BeautifulSoup(body, "lxml")
-        text = soup.get_text(" ", strip=True)
-        if text:
-            (DATA_DIR_TXT / f"{uid}.txt").write_text(text)
-            (DATA_DIR_TXT / f"{uid}.url").write_text(url)
-            (RAW_HTML_DIR / f"{uid}.html").write_bytes(body)
-        else:
+        text = trafilatura.extract(body) or ""
+        unsupported = "your browser is not supported for this experience" in text.lower()
+        if len(text) < 100 or unsupported:
             (NO_TEXT_HTML_DIR / f"{uid}.html").write_bytes(body)
+            bar.update()
+            continue
+        (RAW_HTML_DIR / f"{uid}.html").write_bytes(body)
+        (DATA_DIR_TXT / f"{uid}.txt").write_text(text)
+        (DATA_DIR_TXT / f"{uid}.url").write_text(url)
         for a in soup.find_all("a", href=True):
             link, _ = urldefrag(urljoin(url, a["href"]))
             if allowed(link, nets, dis):
