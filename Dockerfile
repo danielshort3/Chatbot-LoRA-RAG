@@ -1,8 +1,5 @@
 FROM pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime
 
-# Optional Hugging Face token for accessing gated models during build
-ARG HF_TOKEN
-ENV VGJ_HF_TOKEN=${HF_TOKEN}
 
 WORKDIR /app
 
@@ -19,10 +16,6 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY . .
 RUN pip install --no-cache-dir .
 
-RUN python scripts/crawl.py --limit 20 && \
-    python scripts/build_index.py --limit 20 && \
-    python scripts/build_dataset.py && \
-    python scripts/finetune.py
 
 EXPOSE 7860
 CMD ["python", "-m", "vgj_chat"]

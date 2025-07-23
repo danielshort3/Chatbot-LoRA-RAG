@@ -26,26 +26,32 @@ MANUAL_QA_JL = Path("vgj_lora_dataset.jsonl")
 AUTO_QA_JL = Path("vgj_auto_dataset.jsonl")
 COMBINED_QA_JL = Path("vgj_combined.jsonl")
 
-quant_cfg = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_quant_type="nf4",
-    bnb_4bit_compute_dtype=torch.float16,
-    bnb_4bit_use_double_quant=True,
-)
-
 # authenticate for gated base model if token available
 HF_TOKEN = os.getenv("VGJ_HF_TOKEN")
 if HF_TOKEN:
     login(token=HF_TOKEN)
 
 tok = AutoTokenizer.from_pretrained(LLM_NAME, use_fast=True, token=HF_TOKEN)
-llm = AutoModelForCausalLM.from_pretrained(
-    LLM_NAME,
-    quantization_config=quant_cfg,
-    torch_dtype=torch.float16,
-    device_map={"": 0},
-    token=HF_TOKEN,
-)
+if torch.cuda.is_available():
+    quant_cfg = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_compute_dtype=torch.float16,
+        bnb_4bit_use_double_quant=True,
+    )
+    llm = AutoModelForCausalLM.from_pretrained(
+        LLM_NAME,
+        quantization_config=quant_cfg,
+        torch_dtype=torch.float16,
+        device_map={"": 0},
+        token=HF_TOKEN,
+    )
+else:
+    llm = AutoModelForCausalLM.from_pretrained(
+        LLM_NAME,
+        torch_dtype=torch.float32,
+        token=HF_TOKEN,
+    )
 
 
 def gen_question(passage: str) -> str:
