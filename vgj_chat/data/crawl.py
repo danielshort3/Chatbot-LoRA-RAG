@@ -14,8 +14,8 @@ from urllib.parse import urldefrag, urljoin, urlparse
 
 import aiohttp
 import bs4
-import trafilatura
 import requests
+import trafilatura
 from tqdm.auto import tqdm
 
 # settings
@@ -79,9 +79,9 @@ def robots_disallow(domain: str) -> list[str]:
     try:
         txt = requests.get(f"https://{domain}/robots.txt", timeout=10).text.lower()
         return [
-            l.split(":", 1)[1].strip()
-            for l in txt.splitlines()
-            if l.startswith("disallow")
+            line.split(":", 1)[1].strip()
+            for line in txt.splitlines()
+            if line.startswith("disallow")
         ]
     except Exception:
         return []
@@ -121,7 +121,7 @@ async def fetch(
                     mime = r.headers.get("content-type", "text/html").split(";")[0]
                     return mime, await r.read()
         except Exception:
-            await asyncio.sleep(BACKOFF_FACTOR ** attempt)
+            await asyncio.sleep(BACKOFF_FACTOR**attempt)
     return None, b""
 
 
@@ -134,12 +134,20 @@ async def worker(
     delay: float,
     nets: set[str],
     dis: dict[str, list[str]],
+    max_pages: int | None,
+    counter: dict[str, int],
+    lock: asyncio.Lock,
+    stop: asyncio.Event,
 ) -> None:
     rl = RateLimiter(delay)
     bar = tqdm(total=0, position=idx + 1, desc=name, unit="pg", leave=True)
     while True:
         url = await q.get()
         q.task_done()
+        if stop.is_set():
+            if q.empty():
+                break
+            continue
         if url in seen:
             continue
         seen.add(url)
@@ -161,7 +169,9 @@ async def worker(
             continue
         soup = bs4.BeautifulSoup(body, "lxml")
         text = trafilatura.extract(body) or ""
-        unsupported = "your browser is not supported for this experience" in text.lower()
+        unsupported = (
+            "your browser is not supported for this experience" in text.lower()
+        )
         if len(text) < 100 or unsupported:
             (NO_TEXT_HTML_DIR / f"{uid}.html").write_bytes(body)
             bar.update()
@@ -169,14 +179,18 @@ async def worker(
         (RAW_HTML_DIR / f"{uid}.html").write_bytes(body)
         (DATA_DIR_TXT / f"{uid}.txt").write_text(text)
         (DATA_DIR_TXT / f"{uid}.url").write_text(url)
+        async with lock:
+            counter["count"] += 1
+            if max_pages is not None and counter["count"] >= max_pages:
+                stop.set()
         for a in soup.find_all("a", href=True):
             link, _ = urldefrag(urljoin(url, a["href"]))
-            if allowed(link, nets, dis):
+            if not stop.is_set() and allowed(link, nets, dis):
                 q.put_nowait(link)
         bar.update()
 
 
-async def crawl(seed: list[str]) -> None:
+async def crawl(seed: list[str], max_pages: int | None = None) -> None:
     if not seed:
         raise ValueError("Seed list empty – nothing to crawl.")
     nets = internal_set(BASE_URL, ADDITIONAL_DOMAINS)
@@ -184,6 +198,9 @@ async def crawl(seed: list[str]) -> None:
     q: asyncio.Queue[str] = asyncio.Queue()
     [q.put_nowait(u) for u in seed]
     seen: set[str] = set()
+    counter = {"count": 0}
+    lock = asyncio.Lock()
+    stop = asyncio.Event()
     headers = {
         "User-Agent": random.choice(USER_AGENTS),
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
@@ -193,11 +210,25 @@ async def crawl(seed: list[str]) -> None:
         "Connection": "keep-alive",
     }
     async with aiohttp.ClientSession(headers=headers) as session:
+        n_workers = min(N_WORKERS, max_pages or N_WORKERS)
         tasks = [
             asyncio.create_task(
-                worker(f"w{i}", i, session, q, seen, CRAWL_DELAY, nets, dis)
+                worker(
+                    f"w{i}",
+                    i,
+                    session,
+                    q,
+                    seen,
+                    CRAWL_DELAY,
+                    nets,
+                    dis,
+                    max_pages,
+                    counter,
+                    lock,
+                    stop,
+                )
             )
-            for i in range(N_WORKERS)
+            for i in range(n_workers)
         ]
         await q.join()
         for t in tasks:
