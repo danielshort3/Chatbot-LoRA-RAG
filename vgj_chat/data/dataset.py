@@ -6,9 +6,8 @@ import json
 import re
 from pathlib import Path
 
-import bs4
-import nltk
 import torch
+import trafilatura
 from datasets import load_dataset
 from sentence_transformers import SentenceTransformer
 from tqdm.auto import tqdm
@@ -67,9 +66,8 @@ def build_auto_dataset() -> None:
     for txt_f in tqdm(sorted(TXT_DIR.glob("*.txt")), desc="auto-QA", unit="page"):
         url = txt_f.with_suffix(".url").read_text().strip()
         html = (RAW_HTML_DIR / f"{txt_f.stem}.html").read_text()
-        soup = bs4.BeautifulSoup(html, "lxml")
-        paras = [p.get_text(" ", strip=True) for p in soup.find_all("p")]
-        paras = [p for p in paras if len(p.split()) > 25][:PARA_MAX]
+        text = trafilatura.extract(html) or ""
+        paras = [p.strip() for p in text.splitlines() if len(p.split()) > 25][:PARA_MAX]
         if not paras:
             continue
         passage = "\n\n".join(paras)
