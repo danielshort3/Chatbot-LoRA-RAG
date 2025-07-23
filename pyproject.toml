@@ -19,6 +19,7 @@ dependencies = [
     "datasets",
     "scikit-learn",
     "transformers",
+    "trl",
     "nltk",
     "tqdm",
     "numpy",

@@ -34,6 +34,8 @@ isn't available for your Python or CUDA version you will need the
 
 The application requires `bitsandbytes` and the GPU-enabled `faiss-gpu-cu12`
 package in addition to the standard dependencies listed in `pyproject.toml`.
+The LoRA fine‑tuning script also depends on the `trl` library which provides
+`SFTTrainer`.
 
 
 FAISS uses the GPU by default when available. Set `VGJ_FAISS_CUDA=false` or
