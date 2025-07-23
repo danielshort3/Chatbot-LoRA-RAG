@@ -18,9 +18,9 @@ def build_demo() -> gr.Blocks:
     with gr.Blocks(theme=gr.themes.Soft(), title=page_title) as demo:
         gr.Markdown(
             (
-                "##Unofficial Visit Grand Junction Demo Chatbot\n"
+                "## Unofficial Visit Grand Junction Demo Chatbot\n"
                 "<small>Portfolio prototype, **not** endorsed by Visit Grand Junction. "
-                "Content sourced from public VGJ blogs under a fair-use rationale.</small>"
+                "Content sourced from public VGJ blogs and listings under a fair-use rationale.</small>"
             )
         )
 
