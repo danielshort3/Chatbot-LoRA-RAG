@@ -121,7 +121,7 @@ async def fetch(
                     mime = r.headers.get("content-type", "text/html").split(";")[0]
                     return mime, await r.read()
         except Exception:
-            await asyncio.sleep(BACKOFF_FACTOR * attempt)
+            await asyncio.sleep(BACKOFF_FACTOR ** attempt)
     return None, b""
 
 
