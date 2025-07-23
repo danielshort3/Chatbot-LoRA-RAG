@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import threading
 from typing import Generator, List, Tuple
+from contextlib import contextmanager
 
 import faiss  # type: ignore
 import torch  # type: ignore
@@ -108,6 +109,7 @@ URLS: list[str] | None = None
 EMBEDDER: SentenceTransformer | None = None
 RERANKER: CrossEncoder | None = None
 CHAT: pipeline | None = None
+BASELINE_CHAT: pipeline | None = None
 _BOOTED = False
 
 
@@ -124,6 +126,53 @@ def _ensure_boot() -> None:
             CHAT,
         ) = _boot()
         _BOOTED = True
+
+
+def _load_baseline_chat() -> pipeline:
+    """Load the base model without LoRA for baseline comparisons."""
+    logger.info("Loading baseline generator …")
+    quant_cfg = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_compute_dtype=torch.float16,
+        bnb_4bit_use_double_quant=True,
+    )
+    tok = AutoTokenizer.from_pretrained(CFG.base_model, use_fast=True)
+    model = AutoModelForCausalLM.from_pretrained(
+        CFG.base_model,
+        quantization_config=quant_cfg,
+        device_map="auto",
+        torch_dtype=torch.float16,
+    )
+    return pipeline(
+        "text-generation",
+        model=model,
+        tokenizer=tok,
+        device_map="auto",
+        max_new_tokens=CFG.max_new_tokens,
+        do_sample=True,
+    )
+
+
+@contextmanager
+def _baseline_mode() -> Generator[None, None, None]:
+    """Temporarily disable retrieval and LoRA for a baseline generation."""
+
+    global CHAT, INDEX, TEXTS, URLS, EMBEDDER, RERANKER, BASELINE_CHAT
+
+    _ensure_boot()
+
+    if BASELINE_CHAT is None:
+        BASELINE_CHAT = _load_baseline_chat()
+
+    old_values = (CHAT, INDEX, TEXTS, URLS, EMBEDDER, RERANKER)
+    CHAT = BASELINE_CHAT
+    INDEX = TEXTS = URLS = EMBEDDER = RERANKER = None
+
+    try:
+        yield
+    finally:
+        (CHAT, INDEX, TEXTS, URLS, EMBEDDER, RERANKER) = old_values
 
 
 # ---------------------------------------------------------------------------
@@ -258,3 +307,21 @@ def chat(question: str) -> str:
 
     sources_md = "\n".join(f"[{i+1}] {url}" for i, (_s, _t, url) in enumerate(passages))
     return f"{answer}\n\n**Sources**\n{sources_md}"
+
+
+def run_enhanced(question: str) -> str:
+    """Return an answer using RAG with LoRA and citations."""
+    return chat(question)
+
+
+def run_baseline(question: str) -> str:
+    """Generate an answer without retrieval or LoRA adapters."""
+    with _baseline_mode():
+        assert CHAT
+        generated = CHAT(
+            question,
+            do_sample=True,
+            temperature=1.0,
+            max_new_tokens=CFG.max_new_tokens,
+        )[0]["generated_text"]
+    return generated.strip()
