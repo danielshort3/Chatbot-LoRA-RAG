@@ -24,3 +24,25 @@ def test_apply_cli_args():
     assert new_cfg.faiss_cuda is False
     # unchanged value
     assert new_cfg.index_path == cfg.index_path
+
+
+def test_cli_compare_flag(monkeypatch):
+    from vgj_chat import cli, config
+    from vgj_chat.ui import gradio_app
+
+    original = config.CFG
+
+    class Demo:
+        def queue(self):
+            return self
+
+        def launch(self, *a, **k):
+            pass
+
+    monkeypatch.setattr(gradio_app, "build_demo", lambda: Demo())
+
+    try:
+        cli.main(["-c"])
+        assert cli.CFG.compare_mode is True
+    finally:
+        config.CFG = original
