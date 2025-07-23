@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import os
+from pathlib import Path
 
 import torch
 from datasets import load_dataset
+from huggingface_hub import login
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from sklearn.model_selection import train_test_split
 from transformers import (
@@ -17,7 +18,6 @@ from transformers import (
     TrainingArguments,
 )
 from trl import SFTTrainer
-from huggingface_hub import login
 
 BASE_MODEL = "mistralai/Mistral-7B-Instruct-v0.2"
 # dataset built by ``vgj_chat.data.dataset.build_auto_dataset``

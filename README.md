@@ -23,24 +23,18 @@ Run the demo with:
 pipx run hatch env create
 pipx run hatch run python -m vgj_chat --hf-token <HF_TOKEN>
 ```
-The environment installs the GPU-enabled FAISS package so the demo can
-use the GPU when available.  The Docker image installs the
-CUDA-enabled `bitsandbytes` and `faiss-gpu-cu12` wheels.  If a matching wheel
-isn't available for your Python or CUDA version you will need the
-`cuda-toolkit` headers to compile them from source (e.g.
-`apt install cuda-toolkit-12-8`).
+The environment installs the CPU-only FAISS package so the demo runs without
+requiring GPU support. The Docker image includes the CUDA-enabled
+`bitsandbytes` wheel for model inference, but FAISS always runs on the CPU,
+eliminating GPU compatibility concerns.
 
 ## Dependencies
 
-The application requires `bitsandbytes` and the GPU-enabled `faiss-gpu-cu12`
-package in addition to the standard dependencies listed in `pyproject.toml`.
-The LoRA fine‑tuning script also depends on the `trl` library which provides
-`SFTTrainer`.
-
-
-FAISS uses the GPU by default when available. Set `VGJ_FAISS_CUDA=false` or
-pass `--faiss-cuda false` to force CPU indexing while keeping the rest of the
-application on the GPU.
+The application requires `bitsandbytes` and the CPU-only `faiss-cpu` package in
+addition to the standard dependencies listed in `pyproject.toml`. The LoRA
+fine‑tuning script also depends on the `trl` library which provides
+`SFTTrainer`. FAISS always runs on the CPU so no additional configuration is
+needed.
 
 ## Preparation
 
@@ -104,23 +98,6 @@ docker exec -it <container_id> python scripts/build_dataset.py
 docker exec -it <container_id> python scripts/finetune.py
 ```
 
-### GPU compatibility issues
-
-If the container exits with an error similar to:
-
-```
-Faiss assertion 'err__ == cudaSuccess' ... CUDA error 209 no kernel image is available for execution on the device
-```
-
-the FAISS wheel was built for a GPU architecture that does not match your
-hardware. Disable FAISS GPU usage while keeping the model on the GPU with:
-
-```bash
-docker run -p 7860:7860 -e VGJ_HF_TOKEN=<token> -e VGJ_FAISS_CUDA=false vgj-chat
-```
-
-If you need FAISS acceleration, rebuild the Docker image with FAISS compiled for
-your GPU.
 
 ## Architecture
 

@@ -33,8 +33,8 @@ class Config:
 
     # misc
     cuda: bool = torch.cuda.is_available()
-    # controls GPU usage for FAISS separately from the rest of the app
-    faiss_cuda: bool = torch.cuda.is_available()
+    # FAISS always runs on the CPU
+    faiss_cuda: bool = False
     debug: bool = False
 
     # authentication
