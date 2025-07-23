@@ -35,9 +35,25 @@ isn't available for your Python or CUDA version you will need the
 The application requires `bitsandbytes` and the GPU-enabled `faiss-gpu-cu12`
 package in addition to the standard dependencies listed in `pyproject.toml`.
 
+
 FAISS uses the GPU by default when available. Set `VGJ_FAISS_CUDA=false` or
 pass `--faiss-cuda false` to force CPU indexing while keeping the rest of the
 application on the GPU.
+
+## Preparation
+
+Run the helper scripts in order to create the training data, fine‑tune the
+LoRA adapter and start the chat demo:
+
+1. `python scripts/crawl.py`
+2. `python scripts/build_index.py`
+3. `python scripts/build_dataset.py`
+4. `python scripts/finetune.py`
+5. `python -m vgj_chat`
+
+The base model requires an access token. Pass it with `--hf-token` or set the
+`VGJ_HF_TOKEN` environment variable. A CUDA‑enabled GPU is recommended for the
+indexing and fine‑tuning steps and should have at least 16 GB of memory.
 
 ## LoRA adapter
 
