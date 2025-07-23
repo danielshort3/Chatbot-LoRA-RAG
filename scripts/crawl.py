@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 
 from vgj_chat.data.crawl import (
@@ -9,7 +10,16 @@ from vgj_chat.data.crawl import (
 )
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Run crawler")
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum number of pages to download",
+    )
+    args = parser.parse_args()
+
     seed = asyncio.run(
         sitemap_seed(BASE_URL, internal_set(BASE_URL, ADDITIONAL_DOMAINS))
     )
-    asyncio.run(crawl(seed))
+    asyncio.run(crawl(seed, limit=args.limit))

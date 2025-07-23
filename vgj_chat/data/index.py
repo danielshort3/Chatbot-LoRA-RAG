@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Iterable
 
 import faiss  # type: ignore
 import nltk
-import logging
+import torch
 from sentence_transformers import SentenceTransformer
 from tqdm.auto import tqdm
-import torch
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,11 @@ def chunks(
 
 
 def build_index(
-    txt_dir: Path, index_path: Path, meta_path: Path, embed_model: str
+    txt_dir: Path,
+    index_path: Path,
+    meta_path: Path,
+    embed_model: str,
+    max_docs: int | None = None,
 ) -> None:
     """Chunk ``txt_dir`` and build a FAISS index + metadata file."""
     for res in ("punkt", "punkt_tab"):
@@ -57,6 +61,7 @@ def build_index(
     index = None
     meta_f = meta_path.open("w")
     files = sorted(txt_dir.glob("*.txt"))
+    count = 0
     for f in tqdm(files, desc="chunk->embed->index", unit="doc"):
         url = (f.parent / f"{f.stem}.url").read_text().strip()
         if url.startswith("https://www.visitgrandjunction.com/blog/all-posts"):
@@ -76,6 +81,9 @@ def build_index(
                 index = faiss.IndexFlatIP(vec.shape[0])
             index.add(vec.reshape(1, -1))
             meta_f.write(json.dumps({"url": url, "text": chunk}) + "\n")
+        count += 1
+        if max_docs is not None and count >= max_docs:
+            break
     meta_f.close()
     if index is not None:
         faiss.write_index(index, str(index_path))

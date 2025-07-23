@@ -45,8 +45,10 @@ application on the GPU.
 Run the helper scripts in order to create the training data, fine‑tune the
 LoRA adapter and start the chat demo:
 
-1. `python scripts/crawl.py`
-2. `python scripts/build_index.py`
+1. `python scripts/crawl.py` (pass `--limit 20` to download only the first
+   twenty pages for debugging)
+2. `python scripts/build_index.py` (use `--limit 20` to index only the downloaded
+   debug pages)
 3. `python scripts/build_dataset.py`
 4. `python scripts/finetune.py`
 5. `python -m vgj_chat`
