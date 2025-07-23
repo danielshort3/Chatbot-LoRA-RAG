@@ -151,6 +151,7 @@ def _boot() -> tuple[
 
 
 INDEX, TEXTS, URLS, EMBEDDER, RERANKER, CHAT = _boot()
+_RETRIEVAL_DISABLED = False
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -158,6 +159,9 @@ INDEX, TEXTS, URLS, EMBEDDER, RERANKER, CHAT = _boot()
 # ──────────────────────────────────────────────────────────────────────────────
 def _retrieve_unique(query: str) -> List[Tuple[float, str, str]]:
     """Return the top-K unique passages for *query* sorted by score."""
+
+    if _RETRIEVAL_DISABLED:
+        return []
 
     logger.debug("🔍 Query: %s", query)
 
