@@ -40,6 +40,9 @@ class Config:
     # authentication
     hf_token: str | None = None
 
+    # UI mode
+    compare_mode: bool = False
+
     @staticmethod
     def _convert(value: str, typ: type):
         """Convert *value* to *typ* for overrides."""

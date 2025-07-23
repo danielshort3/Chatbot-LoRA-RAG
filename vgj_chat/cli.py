@@ -2,16 +2,25 @@ from __future__ import annotations
 
 import argparse
 
+from dataclasses import replace
+
 from .config import CFG, Config
 
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="VGJ Chat demo")
     Config.add_argparse_args(parser)
+    parser.add_argument(
+        "-c",
+        "--compare",
+        action="store_true",
+        help="Launch UI in Compare mode",
+    )
     args = parser.parse_args(argv)
 
     global CFG
     CFG = CFG.apply_cli_args(args)
+    CFG = replace(CFG, compare_mode=args.compare)
 
     from .ui.gradio_app import build_demo
 
