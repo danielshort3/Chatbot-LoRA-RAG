@@ -14,8 +14,8 @@ from urllib.parse import urldefrag, urljoin, urlparse
 
 import aiohttp
 import bs4
-import trafilatura
 import requests
+import trafilatura
 from tqdm.auto import tqdm
 
 # settings
@@ -79,9 +79,9 @@ def robots_disallow(domain: str) -> list[str]:
     try:
         txt = requests.get(f"https://{domain}/robots.txt", timeout=10).text.lower()
         return [
-            l.split(":", 1)[1].strip()
-            for l in txt.splitlines()
-            if l.startswith("disallow")
+            line.split(":", 1)[1].strip()
+            for line in txt.splitlines()
+            if line.startswith("disallow")
         ]
     except Exception:
         return []
@@ -121,7 +121,7 @@ async def fetch(
                     mime = r.headers.get("content-type", "text/html").split(";")[0]
                     return mime, await r.read()
         except Exception:
-            await asyncio.sleep(BACKOFF_FACTOR ** attempt)
+            await asyncio.sleep(BACKOFF_FACTOR**attempt)
     return None, b""
 
 
@@ -129,17 +129,22 @@ async def worker(
     name: str,
     idx: int,
     session: aiohttp.ClientSession,
-    q: asyncio.Queue[str],
+    q: asyncio.Queue[str | None],
     seen: set[str],
     delay: float,
     nets: set[str],
     dis: dict[str, list[str]],
+    counter: dict[str, int] | None = None,
+    limit: int | None = None,
+    stop_event: asyncio.Event | None = None,
 ) -> None:
     rl = RateLimiter(delay)
     bar = tqdm(total=0, position=idx + 1, desc=name, unit="pg", leave=True)
     while True:
         url = await q.get()
         q.task_done()
+        if url is None:
+            break
         if url in seen:
             continue
         seen.add(url)
@@ -161,7 +166,9 @@ async def worker(
             continue
         soup = bs4.BeautifulSoup(body, "lxml")
         text = trafilatura.extract(body) or ""
-        unsupported = "your browser is not supported for this experience" in text.lower()
+        unsupported = (
+            "your browser is not supported for this experience" in text.lower()
+        )
         if len(text) < 100 or unsupported:
             (NO_TEXT_HTML_DIR / f"{uid}.html").write_bytes(body)
             bar.update()
@@ -169,6 +176,13 @@ async def worker(
         (RAW_HTML_DIR / f"{uid}.html").write_bytes(body)
         (DATA_DIR_TXT / f"{uid}.txt").write_text(text)
         (DATA_DIR_TXT / f"{uid}.url").write_text(url)
+        if counter is not None:
+            counter["n"] += 1
+            if limit is not None and counter["n"] >= limit:
+                if stop_event is not None:
+                    stop_event.set()
+                bar.update()
+                break
         for a in soup.find_all("a", href=True):
             link, _ = urldefrag(urljoin(url, a["href"]))
             if allowed(link, nets, dis):
@@ -176,14 +190,16 @@ async def worker(
         bar.update()
 
 
-async def crawl(seed: list[str]) -> None:
+async def crawl(seed: list[str], limit: int | None = None) -> None:
     if not seed:
         raise ValueError("Seed list empty – nothing to crawl.")
     nets = internal_set(BASE_URL, ADDITIONAL_DOMAINS)
     dis = {n: robots_disallow(n) for n in nets}
-    q: asyncio.Queue[str] = asyncio.Queue()
+    q: asyncio.Queue[str | None] = asyncio.Queue()
     [q.put_nowait(u) for u in seed]
     seen: set[str] = set()
+    counter = {"n": 0}
+    stop_event = asyncio.Event()
     headers = {
         "User-Agent": random.choice(USER_AGENTS),
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
@@ -195,10 +211,26 @@ async def crawl(seed: list[str]) -> None:
     async with aiohttp.ClientSession(headers=headers) as session:
         tasks = [
             asyncio.create_task(
-                worker(f"w{i}", i, session, q, seen, CRAWL_DELAY, nets, dis)
+                worker(
+                    f"w{i}",
+                    i,
+                    session,
+                    q,
+                    seen,
+                    CRAWL_DELAY,
+                    nets,
+                    dis,
+                    counter,
+                    limit,
+                    stop_event,
+                )
             )
             for i in range(N_WORKERS)
         ]
-        await q.join()
-        for t in tasks:
-            t.cancel()
+        if limit is None:
+            await q.join()
+        else:
+            await stop_event.wait()
+        for _ in tasks:
+            q.put_nowait(None)
+        await asyncio.gather(*tasks, return_exceptions=True)
