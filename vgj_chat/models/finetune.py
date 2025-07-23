@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
 
 import torch
 from datasets import load_dataset
@@ -16,6 +17,7 @@ from transformers import (
     TrainingArguments,
 )
 from trl import SFTTrainer
+from huggingface_hub import login
 
 BASE_MODEL = "mistralai/Mistral-7B-Instruct-v0.2"
 # dataset built by ``vgj_chat.data.dataset.build_auto_dataset``
@@ -36,19 +38,23 @@ LR = 2e-4
 
 
 def run_finetune() -> None:
+    hf_token = os.getenv("VGJ_HF_TOKEN")
+    if hf_token:
+        login(token=hf_token)
     bnb_cfg = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_quant_type="nf4",
         bnb_4bit_compute_dtype=torch.float16,
         bnb_4bit_use_double_quant=True,
     )
-    tok = AutoTokenizer.from_pretrained(BASE_MODEL, use_fast=True)
+    tok = AutoTokenizer.from_pretrained(BASE_MODEL, use_fast=True, token=hf_token)
     tok.pad_token = tok.eos_token
     base = AutoModelForCausalLM.from_pretrained(
         BASE_MODEL,
         quantization_config=bnb_cfg,
         device_map={"": 0},
         torch_dtype=torch.float16,
+        token=hf_token,
     )
     base = prepare_model_for_kbit_training(base)
     lora_cfg = LoraConfig(

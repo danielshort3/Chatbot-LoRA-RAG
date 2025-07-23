@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from datasets import load_dataset
 from sentence_transformers import SentenceTransformer
 from tqdm.auto import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from huggingface_hub import login
 
 LLM_NAME = "mistralai/Mistral-7B-Instruct-v0.2"
 PARA_MAX = 3
@@ -31,12 +33,18 @@ quant_cfg = BitsAndBytesConfig(
     bnb_4bit_use_double_quant=True,
 )
 
-tok = AutoTokenizer.from_pretrained(LLM_NAME, use_fast=True)
+# authenticate for gated base model if token available
+HF_TOKEN = os.getenv("VGJ_HF_TOKEN")
+if HF_TOKEN:
+    login(token=HF_TOKEN)
+
+tok = AutoTokenizer.from_pretrained(LLM_NAME, use_fast=True, token=HF_TOKEN)
 llm = AutoModelForCausalLM.from_pretrained(
     LLM_NAME,
     quantization_config=quant_cfg,
     torch_dtype=torch.float16,
     device_map={"": 0},
+    token=HF_TOKEN,
 )
 
 

@@ -53,9 +53,11 @@ LoRA adapter and start the chat demo:
 4. `python scripts/finetune.py`
 5. `python -m vgj_chat`
 
-The base model requires an access token. Pass it with `--hf-token` or set the
-`VGJ_HF_TOKEN` environment variable. A CUDA‑enabled GPU is recommended for the
-indexing and fine‑tuning steps and should have at least 16 GB of memory.
+The base model requires an access token. Set the token in `VGJ_HF_TOKEN` (or
+pass `--hf-token` when launching the chat). The helper scripts read the same
+variable so ensure it is exported before running them. A CUDA‑enabled GPU is
+recommended for the indexing and fine‑tuning steps and should have at least
+16 GB of memory.
 
 ## LoRA adapter
 
