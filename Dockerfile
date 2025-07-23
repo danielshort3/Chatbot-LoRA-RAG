@@ -1,4 +1,4 @@
-FROM pytorch/pytorch:2.2.2-cuda12.1-cudnn8-devel
+FROM pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime
 
 WORKDIR /app
 
@@ -17,3 +17,6 @@ RUN pip install --no-cache-dir .
 
 RUN python scripts/crawl.py && \
     python scripts/build_index.py
+
+EXPOSE 7860
+CMD ["python", "-m", "vgj_chat"]
