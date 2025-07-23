@@ -35,8 +35,9 @@ isn't available for your Python or CUDA version you will need the
 The application requires `bitsandbytes` and the GPU-enabled `faiss-gpu-cu12`
 package in addition to the standard dependencies listed in `pyproject.toml`.
 
-FAISS will automatically use the GPU whenever `torch.cuda.is_available()` is
-true or when the `--cuda` option is passed; otherwise it falls back to the CPU.
+FAISS uses the GPU by default when available. Set `VGJ_FAISS_CUDA=false` or
+pass `--faiss-cuda false` to force CPU indexing while keeping the rest of the
+application on the GPU.
 
 ## LoRA adapter
 
@@ -74,14 +75,15 @@ If the container exits with an error similar to:
 Faiss assertion 'err__ == cudaSuccess' ... CUDA error 209 no kernel image is available for execution on the device
 ```
 
-the FAISS wheel was built for a GPU architecture that does not match your hardware.
-Run the demo on the CPU by disabling CUDA:
+the FAISS wheel was built for a GPU architecture that does not match your
+hardware. Disable FAISS GPU usage while keeping the model on the GPU with:
 
 ```bash
-docker run -p 7860:7860 -e VGJ_HF_TOKEN=<token> -e VGJ_CUDA=false vgj-chat
+docker run -p 7860:7860 -e VGJ_HF_TOKEN=<token> -e VGJ_FAISS_CUDA=false vgj-chat
 ```
 
-Rebuilding the Docker image with FAISS compiled for your GPU will enable GPU acceleration.
+If you need FAISS acceleration, rebuild the Docker image with FAISS compiled for
+your GPU.
 
 ## Architecture
 

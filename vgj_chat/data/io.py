@@ -38,7 +38,7 @@ def load_index(path: Path) -> faiss.Index:
 
     index = faiss.read_index(str(path))
 
-    if CFG.cuda and getattr(faiss, "get_num_gpus", lambda: 0)() > 0:
+    if CFG.faiss_cuda and getattr(faiss, "get_num_gpus", lambda: 0)() > 0:
         try:
             res = faiss.StandardGpuResources()
             index = faiss.index_cpu_to_gpu(res, 0, index)
