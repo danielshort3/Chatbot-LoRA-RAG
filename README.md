@@ -77,6 +77,20 @@ VGJ_LORA_DIR=path/to/lora-checkpoint python -m vgj_chat
 Run `scripts/finetune.py` to train a new adapter when suitable data is
 available.
 
+## Compare Mode: Evaluating LoRA + FAISS vs. Baseline
+
+Launch the UI with the `--compare` flag to display both the enhanced
+pipeline and a raw baseline side by side. The temperature is fixed to
+`1.0` for consistent sampling and the flag is entirely backward
+compatible—running without it behaves exactly as before.
+
+```bash
+python -m vgj_chat --hf-token <TOKEN> --compare
+```
+
+The dual‑chat layout shows two chat windows labelled **Enhanced (LoRA +
+FAISS)** and **Baseline (raw)** so you can easily compare answers.
+
 ## Docker
 
 A Dockerfile is provided for a fully containerised setup. The image
