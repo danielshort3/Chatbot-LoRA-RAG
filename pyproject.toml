@@ -56,5 +56,8 @@ extend-exclude = [
   "vgj_chat/models/*",
 ]
 
+[tool.setuptools.packages.find]
+include = ["vgj_chat*"]
+
 [tool.pytest.ini_options]
 addopts = "-ra"

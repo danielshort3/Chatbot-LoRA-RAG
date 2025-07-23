@@ -86,7 +86,9 @@ The image also installs `build-essential` so a C/C++ compiler is available for
 dependencies like `bitsandbytes` and the Triton runtime.
 
 ```bash
-docker build -t vgj-chat .
+# pass your Hugging Face token so the helper scripts can download the gated
+# base model during the build
+docker build --build-arg HF_TOKEN=<token> -t vgj-chat .
 # GPU acceleration requires the host to install the NVIDIA Container Toolkit
 # and have compatible NVIDIA drivers. Run the container with:
 docker run --gpus all -p 7860:7860 -e VGJ_HF_TOKEN=<token> vgj-chat

@@ -1,5 +1,9 @@
 FROM pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime
 
+# Optional Hugging Face token for accessing gated models during build
+ARG HF_TOKEN
+ENV VGJ_HF_TOKEN=${HF_TOKEN}
+
 WORKDIR /app
 
 RUN apt-get update && \
