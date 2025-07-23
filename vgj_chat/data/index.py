@@ -42,6 +42,11 @@ def build_index(
     txt_dir: Path, index_path: Path, meta_path: Path, embed_model: str
 ) -> None:
     """Chunk ``txt_dir`` and build a FAISS index + metadata file."""
+    for res in ("punkt", "punkt_tab"):
+        try:
+            nltk.data.find(f"tokenizers/{res}")
+        except LookupError:  # pragma: no cover - depends on user env
+            nltk.download(res, quiet=True)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     logger.info(
         "Using %s for embeddings (CUDA available: %s)",
