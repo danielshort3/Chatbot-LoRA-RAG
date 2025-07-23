@@ -5,6 +5,8 @@ import re
 from pathlib import Path
 from typing import List, Tuple
 
+import logging
+
 import faiss  # type: ignore
 
 from ..config import CFG
@@ -28,6 +30,9 @@ def clean(text: str) -> str:
     return "\n".join(cleaned_lines).strip()
 
 
+logger = logging.getLogger(__name__)
+
+
 def load_index(path: Path) -> faiss.Index:
     """Load a FAISS index from *path* using GPU when available."""
 
@@ -37,8 +42,8 @@ def load_index(path: Path) -> faiss.Index:
         try:
             res = faiss.StandardGpuResources()
             index = faiss.index_cpu_to_gpu(res, 0, index)
-        except Exception:
-            pass
+        except Exception as exc:  # pragma: no cover - GPU runtime errors
+            logger.warning("Falling back to CPU index due to GPU error: %s", exc)
 
     return index
 
