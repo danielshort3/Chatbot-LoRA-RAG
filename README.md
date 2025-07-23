@@ -59,7 +59,8 @@ The base model requires an access token. Set the token in `VGJ_HF_TOKEN` (or
 pass `--hf-token` when launching the chat). The helper scripts read the same
 variable so ensure it is exported before running them. A CUDA‑enabled GPU is
 recommended for the indexing and fine‑tuning steps and should have at least
-16 GB of memory.
+16 GB of memory. These steps fall back to CPU execution when no GPU is
+available but will run significantly slower.
 
 ## LoRA adapter
 
@@ -79,19 +80,28 @@ available.
 ## Docker
 
 A Dockerfile is provided for a fully containerised setup. The image
-uses the PyTorch 2.7.1 base with CUDA 12.8 and cuDNN 9. Building it will
-run the crawler and indexer so the demo is ready to launch:
+uses the PyTorch 2.7.1 base with CUDA 12.8 and cuDNN 9. Building the image
+just installs the application and its dependencies. Run the helper scripts
+inside the container to crawl pages, build the index and fine‑tune the LoRA
+adapter:
 
 The image also installs `build-essential` so a C/C++ compiler is available for
 dependencies like `bitsandbytes` and the Triton runtime.
 
 ```bash
-# pass your Hugging Face token so the helper scripts can download the gated
-# base model during the build
-docker build --build-arg HF_TOKEN=<token> -t vgj-chat .
+docker build -t vgj-chat .
 # GPU acceleration requires the host to install the NVIDIA Container Toolkit
-# and have compatible NVIDIA drivers. Run the container with:
+# and have compatible NVIDIA drivers.
 docker run --gpus all -p 7860:7860 -e VGJ_HF_TOKEN=<token> vgj-chat
+```
+Execute the helper scripts inside the running container to collect pages,
+create the index and fine‑tune the LoRA adapter. For example:
+
+```bash
+docker exec -it <container_id> python scripts/crawl.py --limit 20
+docker exec -it <container_id> python scripts/build_index.py --limit 20
+docker exec -it <container_id> python scripts/build_dataset.py
+docker exec -it <container_id> python scripts/finetune.py
 ```
 
 ### GPU compatibility issues
