@@ -10,10 +10,10 @@ from pathlib import Path
 import torch
 import trafilatura
 from datasets import load_dataset
+from huggingface_hub import login
 from sentence_transformers import SentenceTransformer
 from tqdm.auto import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-from huggingface_hub import login
 
 LLM_NAME = "mistralai/Mistral-7B-Instruct-v0.2"
 PARA_MAX = 3

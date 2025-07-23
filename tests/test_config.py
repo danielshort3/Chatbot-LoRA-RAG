@@ -17,7 +17,9 @@ def test_apply_cli_args():
     cfg = Config()
     parser = argparse.ArgumentParser()
     Config.add_argparse_args(parser)
-    args = parser.parse_args(["--top-k", "3", "--debug", "true", "--faiss-cuda", "false"])
+    args = parser.parse_args(
+        ["--top-k", "3", "--debug", "true", "--faiss-cuda", "false"]
+    )
     new_cfg = cfg.apply_cli_args(args)
     assert new_cfg.top_k == 3
     assert new_cfg.debug is True

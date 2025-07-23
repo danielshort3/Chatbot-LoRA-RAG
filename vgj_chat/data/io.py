@@ -1,15 +1,12 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from pathlib import Path
 from typing import List, Tuple
 
-import logging
-
 import faiss  # type: ignore
-
-from ..config import CFG
 
 FAQ_RX = re.compile(r"^[QA]:", re.I)
 FOOTER_RX = re.compile(
@@ -34,16 +31,9 @@ logger = logging.getLogger(__name__)
 
 
 def load_index(path: Path) -> faiss.Index:
-    """Load a FAISS index from *path* using GPU when available."""
+    """Load a FAISS index from *path* (CPU only)."""
 
     index = faiss.read_index(str(path))
-
-    if CFG.faiss_cuda and getattr(faiss, "get_num_gpus", lambda: 0)() > 0:
-        try:
-            res = faiss.StandardGpuResources()
-            index = faiss.index_cpu_to_gpu(res, 0, index)
-        except Exception as exc:  # pragma: no cover - GPU runtime errors
-            logger.warning("Falling back to CPU index due to GPU error: %s", exc)
 
     return index
 
