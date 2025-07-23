@@ -28,7 +28,7 @@ use the GPU when available.  The Docker image installs the
 CUDA-enabled `bitsandbytes` and `faiss-gpu-cu12` wheels.  If a matching wheel
 isn't available for your Python or CUDA version you will need the
 `cuda-toolkit` headers to compile them from source (e.g.
-`apt install cuda-toolkit-12-1`).
+`apt install cuda-toolkit-12-8`).
 
 ## Dependencies
 
@@ -56,7 +56,7 @@ available.
 ## Docker
 
 A Dockerfile is provided for a fully containerised setup. The image
-uses the PyTorch 2.2.2 base with CUDA 12.1 and cuDNN 8. Building it will
+uses the PyTorch 2.7.1 base with CUDA 12.8 and cuDNN 9. Building it will
 run the crawler and indexer so the demo is ready to launch:
 
 ```bash
