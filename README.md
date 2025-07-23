@@ -66,6 +66,23 @@ docker build -t vgj-chat .
 docker run --gpus all -p 7860:7860 -e VGJ_HF_TOKEN=<token> vgj-chat
 ```
 
+### GPU compatibility issues
+
+If the container exits with an error similar to:
+
+```
+Faiss assertion 'err__ == cudaSuccess' ... CUDA error 209 no kernel image is available for execution on the device
+```
+
+the FAISS wheel was built for a GPU architecture that does not match your hardware.
+Run the demo on the CPU by disabling CUDA:
+
+```bash
+docker run -p 7860:7860 -e VGJ_HF_TOKEN=<token> -e VGJ_CUDA=false vgj-chat
+```
+
+Rebuilding the Docker image with FAISS compiled for your GPU will enable GPU acceleration.
+
 ## Architecture
 
 ```
