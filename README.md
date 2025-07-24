@@ -60,7 +60,7 @@ __main__.py       Enables `python -m vgj_chat`
 Run the helper scripts in order or execute the pipeline in one go:
 
 ```bash
-python scripts/run_pipeline.py --limit 20
+python scripts/run_pipeline.py
 ```
 
 Manual steps if you prefer running them individually:
@@ -111,7 +111,7 @@ Execute the helper scripts inside the running container to crawl pages, create
 an index and fine‑tune the adapter:
 
 ```bash
-docker exec -it <container> python scripts/run_pipeline.py --limit 20
+docker exec -it <container> python scripts/run_pipeline.py
 ```
 
 ### GPU compatibility issues
