@@ -43,8 +43,11 @@ def _configure_logging() -> None:
     logger.setLevel(level)
 
 
+# Configure global logging and state lock
 _configure_logging()
 
+# Lock to guard global model state when switching pipelines
+_STATE_LOCK = threading.Lock()
 
 # ---------------------------------------------------------------------------
 # resource initialisation
@@ -162,18 +165,36 @@ def _baseline_mode() -> Generator[None, None, None]:
 
     global CHAT, INDEX, TEXTS, URLS, EMBEDDER, RERANKER, BASELINE_CHAT, _RETRIEVAL_DISABLED
 
-    if BASELINE_CHAT is None:
-        BASELINE_CHAT = _load_baseline_chat()
-
-    old_values = (CHAT, INDEX, TEXTS, URLS, EMBEDDER, RERANKER, _RETRIEVAL_DISABLED)
-    CHAT = BASELINE_CHAT
-    INDEX = TEXTS = URLS = EMBEDDER = RERANKER = None
-    _RETRIEVAL_DISABLED = True
-
+    _STATE_LOCK.acquire()
     try:
+        if BASELINE_CHAT is None:
+            BASELINE_CHAT = _load_baseline_chat()
+
+        old_values = (
+            CHAT,
+            INDEX,
+            TEXTS,
+            URLS,
+            EMBEDDER,
+            RERANKER,
+            _RETRIEVAL_DISABLED,
+        )
+        CHAT = BASELINE_CHAT
+        INDEX = TEXTS = URLS = EMBEDDER = RERANKER = None
+        _RETRIEVAL_DISABLED = True
+
         yield
     finally:
-        (CHAT, INDEX, TEXTS, URLS, EMBEDDER, RERANKER, _RETRIEVAL_DISABLED) = old_values
+        (
+            CHAT,
+            INDEX,
+            TEXTS,
+            URLS,
+            EMBEDDER,
+            RERANKER,
+            _RETRIEVAL_DISABLED,
+        ) = old_values
+        _STATE_LOCK.release()
 
 
 # ---------------------------------------------------------------------------
@@ -286,22 +307,23 @@ def chat(question: str) -> str:
     _ensure_boot()
     assert CHAT and EMBEDDER
 
-    passages = retrieve_unique(question)
-    if not passages:
-        return "Sorry, I couldn’t find anything relevant."
+    with _STATE_LOCK:
+        passages = retrieve_unique(question)
+        if not passages:
+            return "Sorry, I couldn’t find anything relevant."
 
-    src_block = "\n\n".join(
-        f"[{i+1}] {url}\n{text}" for i, (_s, text, url) in enumerate(passages)
-    )
-    prompt = (
-        "Answer the *single* question below using only the listed sources. "
-        "Do not add additional questions, FAQs, or headings. "
-        "Cite each fact like [1].\n\n"
-        f"{src_block}\n\nQ: {question}\nA:"
-    )
+        src_block = "\n\n".join(
+            f"[{i+1}] {url}\n{text}" for i, (_s, text, url) in enumerate(passages)
+        )
+        prompt = (
+            "Answer the *single* question below using only the listed sources. "
+            "Do not add additional questions, FAQs, or headings. "
+            "Cite each fact like [1].\n\n"
+            f"{src_block}\n\nQ: {question}\nA:"
+        )
 
-    generated = CHAT(prompt)[0]["generated_text"]
-    answer = generated[len(prompt) :].strip()
+        generated = CHAT(prompt)[0]["generated_text"]
+        answer = generated[len(prompt) :].strip()
 
     sources_md = "\n".join(f"[{i+1}] {url}" for i, (_s, _t, url) in enumerate(passages))
     return f"{answer}\n\n**Sources**\n{sources_md}"
