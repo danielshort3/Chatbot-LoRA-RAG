@@ -306,7 +306,7 @@ with gr.Blocks(theme=gr.themes.Soft(), title=page_title) as demo:
 
     chat_state = gr.State([])
 
-    chatbox = gr.Chatbot(height=450, type="messages", label="Conversation")
+    chatbox = gr.Chatbot(type="messages", label="Conversation")
     textbox = gr.Textbox(
         placeholder="Ask about Grand Junction...",
         show_label=False,

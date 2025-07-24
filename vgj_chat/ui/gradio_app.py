@@ -34,12 +34,10 @@ def build_demo() -> gr.Blocks:
 
             with gr.Row():
                 baseline_box = gr.Chatbot(
-                    height=450,
                     type="messages",
                     label="Baseline (raw)",
                 )
                 enhanced_box = gr.Chatbot(
-                    height=450,
                     type="messages",
                     label="Enhanced (LoRA + FAISS)",
                 )
@@ -50,7 +48,6 @@ def build_demo() -> gr.Blocks:
                 container=False,
             )
 
-            gr.Markdown("Temp = 0.8")
 
             def submit(msg: str, hist_e: list, hist_b: list):
                 hist_e.append({"role": "user", "content": msg})
@@ -88,7 +85,7 @@ def build_demo() -> gr.Blocks:
         else:
             chat_state = gr.State([])
 
-            chatbox = gr.Chatbot(height=450, type="messages", label="Conversation")
+            chatbox = gr.Chatbot(type="messages", label="Conversation")
             textbox = gr.Textbox(
                 placeholder="Ask about Grand Junction...",
                 show_label=False,
