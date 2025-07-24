@@ -1,4 +1,5 @@
 import argparse
+import logging
 
 from vgj_chat.config import Config
 
@@ -26,7 +27,7 @@ def test_apply_cli_args():
     assert new_cfg.index_path == cfg.index_path
 
 
-def test_cli_compare_flag(monkeypatch):
+def test_cli_compare_flag(monkeypatch, caplog):
     from vgj_chat import cli, config
     from vgj_chat.ui import gradio_app
 
@@ -40,9 +41,13 @@ def test_cli_compare_flag(monkeypatch):
             pass
 
     monkeypatch.setattr(gradio_app, "build_demo", lambda: Demo())
+    caplog.set_level(logging.INFO)
 
     try:
         cli.main(["-c"])
         assert cli.CFG.compare_mode is True
+        assert (
+            "Compare mode enabled: launching dual-chat UI" in caplog.text
+        )
     finally:
         config.CFG = original
