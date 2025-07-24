@@ -326,7 +326,7 @@ def run_baseline(question: str) -> str:
         generated = CHAT(
             question,
             do_sample=True,
-            temperature=1.0,
+            temperature=0.8,
             max_new_tokens=CFG.max_new_tokens,
         )[0]["generated_text"]
     return generated.strip()

@@ -81,7 +81,7 @@ available.
 
 Launch the UI with the `--compare` flag to display both the enhanced
 pipeline and a raw baseline side by side. The temperature is fixed to
-`1.0` for consistent sampling and the flag is entirely backward
+`0.8` for consistent sampling and the flag is entirely backward
 compatible—running without it behaves exactly as before.
 
 ```bash
