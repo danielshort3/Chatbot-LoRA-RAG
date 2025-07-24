@@ -1,9 +1,11 @@
 # Chatbot-LoRa-RAG
 
-Example RAG chatbot using a LoRA adapted language model.  The code is
-organised as a Python package named `vgj_chat`.
+A small Retrieval-Augmented Generation (RAG) demo that fine-tunes a language
+model with LoRA and serves a Gradio chat UI. The application lives in the
+`vgj_chat` Python package and includes helper scripts to build the dataset and
+index used for retrieval.
 
-Launch the Gradio demo with:
+Launch the demo with:
 
 ```bash
 python -m vgj_chat --hf-token <HF_TOKEN>
@@ -11,111 +13,102 @@ python -m vgj_chat --hf-token <HF_TOKEN>
 
 ## Quick start
 
-Create a local environment with [Hatch](https://hatch.pypa.io/) and run the demo.
-The default base model `mistralai/Mistral-7B-Instruct-v0.2` is gated on
-[Hugging Face](https://huggingface.co/). Request access on the model page and
-generate an access token from your account settings. Pass this token using the
-`--hf-token` command-line option or the `VGJ_HF_TOKEN` environment variable.
-
-Run the demo with:
+1. Install [Hatch](https://hatch.pypa.io/) via `pipx install hatch`.
+2. Create a local environment and run the UI:
 
 ```bash
 pipx run hatch env create
 pipx run hatch run python -m vgj_chat --hf-token <HF_TOKEN>
 ```
-The environment installs the GPU-enabled FAISS package so the demo can
-use the GPU when available.  The Docker image installs the
-CUDA-enabled `bitsandbytes` and `faiss-gpu-cu12` wheels.  If a matching wheel
-isn't available for your Python or CUDA version you will need the
-`cuda-toolkit` headers to compile them from source (e.g.
-`apt install cuda-toolkit-12-8`).
+
+The default model `mistralai/Mistral-7B-Instruct-v0.2` is gated on
+[Hugging Face](https://huggingface.co/). Request access on the model page and
+supply your token with `--hf-token` or the `VGJ_HF_TOKEN` environment variable.
 
 ## Dependencies
 
-The application requires `bitsandbytes` and the GPU-enabled `faiss-gpu-cu12`
-package in addition to the standard dependencies listed in `pyproject.toml`.
-The LoRA fine‑tuning script also depends on the `trl` library which provides
-`SFTTrainer`.
+Apart from the packages listed in `pyproject.toml`, the demo requires
+`bitsandbytes` and the GPU-enabled `faiss-gpu-cu12` wheel. The optional
+fine-tuning script depends on the `trl` library.
 
+FAISS uses the GPU by default when available. Set `VGJ_FAISS_CUDA=false` or pass
+`--faiss-cuda false` to force CPU indexing while keeping the model on the GPU.
 
-FAISS uses the GPU by default when available. Set `VGJ_FAISS_CUDA=false` or
-pass `--faiss-cuda false` to force CPU indexing while keeping the rest of the
-application on the GPU.
+## Repository structure
+
+```
+vgj_chat/           Python package with the main application
+scripts/            Helper scripts for crawling, indexing and training
+archive/            Notebook with early experiments
+tests/              Pytest suite
+.github/workflows/  Continuous integration pipeline
+```
+
+Key modules inside `vgj_chat`:
+
+```
+cli.py            CLI entrypoint launching the UI
+config.py         Configuration dataclass
+ui/gradio_app.py  Builds the Gradio interface
+data/             Crawling, indexing and dataset helpers
+models/           RAG model, LoRA fine-tuning and guardrails
+__main__.py       Enables `python -m vgj_chat`
+```
 
 ## Preparation
 
-Run the helper scripts in order to create the training data, fine‑tune the
-LoRA adapter and start the chat demo:
+Run the helper scripts in order:
 
-1. `python scripts/crawl.py` (pass `--limit 20` to download only the first
-   twenty pages for debugging)
-2. `python scripts/build_index.py` (use `--limit 20` to index only the downloaded
-   debug pages)
-3. `python scripts/build_dataset.py`
-4. `python scripts/finetune.py`
-5. `python -m vgj_chat`
+1. `python scripts/crawl.py` – download webpages
+2. `python scripts/build_index.py` – create the FAISS index
+3. `python scripts/build_dataset.py` – build training pairs
+4. `python scripts/finetune.py` – train a LoRA adapter
+5. `python -m vgj_chat` – start chatting
 
-The base model requires an access token. Set the token in `VGJ_HF_TOKEN` (or
-pass `--hf-token` when launching the chat). The helper scripts read the same
-variable so ensure it is exported before running them. A CUDA‑enabled GPU is
-recommended for the indexing and fine‑tuning steps and should have at least
-16 GB of memory. These steps fall back to CPU execution when no GPU is
-available but will run significantly slower.
+Each script accepts `--help` for available options. Export `VGJ_HF_TOKEN` so the
+scripts can download the base model. A CUDA‑enabled GPU is recommended for
+indexing and fine‑tuning but the steps will fall back to the CPU if necessary.
 
 ## LoRA adapter
 
-This repository does not include the fine‑tuned LoRA adapter weights. Point the
-application at your own checkpoint by passing `--lora-dir` or setting the
-`VGJ_LORA_DIR` environment variable:
+The repository does not include fine‑tuned adapter weights. Point the chat
+application at your checkpoint with:
 
 ```bash
-python -m vgj_chat --lora-dir path/to/lora-checkpoint
-# or
-VGJ_LORA_DIR=path/to/lora-checkpoint python -m vgj_chat
+python -m vgj_chat --lora-dir path/to/lora
 ```
 
-Run `scripts/finetune.py` to train a new adapter when suitable data is
-available.
+or set `VGJ_LORA_DIR` in the environment. Run `scripts/finetune.py` whenever you
+have new training data.
 
-## Compare Mode: Evaluating LoRA + FAISS vs. Baseline
+## Compare mode
 
-Launch the UI with the `--compare` flag to display both the enhanced
-pipeline and a raw baseline side by side. The temperature is fixed to
-`0.8` for consistent sampling and the flag is entirely backward
-compatible—running without it behaves exactly as before.
+Start the UI with `--compare` to show answers from the LoRA+FAISS pipeline and a
+raw baseline side by side:
 
 ```bash
 python -m vgj_chat --hf-token <TOKEN> --compare
 ```
 
-The dual‑chat layout shows two chat windows labelled **Enhanced (LoRA +
-FAISS)** and **Baseline (raw)** so you can easily compare answers.
-
 ## Docker
 
-A Dockerfile is provided for a fully containerised setup. The image
-uses the PyTorch 2.7.1 base with CUDA 12.8 and cuDNN 9. Building the image
-just installs the application and its dependencies. Run the helper scripts
-inside the container to crawl pages, build the index and fine‑tune the LoRA
-adapter:
-
-The image also installs `build-essential` so a C/C++ compiler is available for
-dependencies like `bitsandbytes` and the Triton runtime.
+A Dockerfile is provided for a containerised setup based on the PyTorch 2.7.1
+CUDA 12.8 image. Build and run it as follows:
 
 ```bash
 docker build -t vgj-chat .
-# GPU acceleration requires the host to install the NVIDIA Container Toolkit
-# and have compatible NVIDIA drivers.
+# GPU acceleration requires the NVIDIA Container Toolkit and compatible drivers
 docker run --gpus all -p 7860:7860 -e VGJ_HF_TOKEN=<token> vgj-chat
 ```
-Execute the helper scripts inside the running container to collect pages,
-create the index and fine‑tune the LoRA adapter. For example:
+
+Execute the helper scripts inside the running container to crawl pages, create
+an index and fine‑tune the adapter:
 
 ```bash
-docker exec -it <container_id> python scripts/crawl.py --limit 20
-docker exec -it <container_id> python scripts/build_index.py --limit 20
-docker exec -it <container_id> python scripts/build_dataset.py
-docker exec -it <container_id> python scripts/finetune.py
+docker exec -it <container> python scripts/crawl.py --limit 20
+docker exec -it <container> python scripts/build_index.py
+docker exec -it <container> python scripts/build_dataset.py
+docker exec -it <container> python scripts/finetune.py
 ```
 
 ### GPU compatibility issues
@@ -136,41 +129,22 @@ docker run -p 7860:7860 -e VGJ_HF_TOKEN=<token> -e VGJ_FAISS_CUDA=false vgj-chat
 If you need FAISS acceleration, rebuild the Docker image with FAISS compiled for
 your GPU.
 
-## Architecture
-
-```
-vgj_chat
-├── cli.py            # CLI entrypoint launching the UI
-├── config.py         # dataclass with configuration defaults
-├── ui/gradio_app.py  # builds the Gradio interface
-├── data/             # crawling, indexing and dataset helpers
-├── models/           # RAG model, LoRA fine-tuning and guardrails
-└── __main__.py       # allows `python -m vgj_chat`
-```
-
 ## Configuration
 
-Configuration defaults live in `vgj_chat.config.Config`.  Any field can be
-overridden by environment variables prefixed with `VGJ_` or by passing a
-command-line option of the same name.
-
-Environment variables use upper-case field names, for example
-`VGJ_INDEX_PATH` overrides `index_path`.
-
-Command-line overrides replace underscores with dashes, e.g.:
+Configuration defaults live in `vgj_chat.config.Config`. Override any field with
+an environment variable prefixed `VGJ_` or with a command-line option of the same
+name. CLI options use dashes instead of underscores:
 
 ```bash
 python -m vgj_chat --hf-token <HF_TOKEN> --index-path my.index --top-k 3
 ```
 
-Debug logging is disabled by default. Enable it with `--debug true` or set
-`VGJ_DEBUG=true` in the environment.
-
-Both methods may be combined; CLI options take precedence.
+Debug logging is disabled by default. Enable it with `--debug true` or
+`VGJ_DEBUG=true`.
 
 ## Development
 
-Run the helpers in the `Makefile` to format, lint and test the project:
+Format, lint and test the project using the helpers in `Makefile`:
 
 ```bash
 make format  # run black and isort
@@ -178,6 +152,9 @@ make lint    # run ruff
 make test    # run pytest
 ```
 
+A GitHub Actions workflow runs the same checks on every push and pull request.
+
 ## License
 
-This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for
+more information.
