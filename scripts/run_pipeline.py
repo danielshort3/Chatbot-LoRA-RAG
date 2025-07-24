@@ -1,7 +1,6 @@
 import argparse
 import subprocess
 
-
 STEPS = [
     ["python", "scripts/crawl.py"],
     ["python", "scripts/build_index.py"],
@@ -16,13 +15,14 @@ def main() -> None:
     parser.add_argument(
         "--limit",
         type=int,
-        default=20,
+        default=None,
         help="Limit number of pages to crawl",
     )
     args = parser.parse_args()
 
     steps = STEPS.copy()
-    steps[0] = ["python", "scripts/crawl.py", "--limit", str(args.limit)]
+    if args.limit is not None:
+        steps[0] = ["python", "scripts/crawl.py", "--limit", str(args.limit)]
 
     for cmd in steps:
         subprocess.run(cmd, check=True)
@@ -30,4 +30,3 @@ def main() -> None:
 
 if __name__ == "__main__":  # pragma: no cover
     main()
-
