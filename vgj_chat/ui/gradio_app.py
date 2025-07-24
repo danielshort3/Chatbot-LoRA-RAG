@@ -14,7 +14,7 @@ def user_submit(msg: str, hist: list[dict[str, str]]):
     return "", hist
 
 
-page_title = "Unofficial Visit Grand Junction Demo – not endorsed by VGJ"
+page_title = "Unofficial Visit Grand Junction Demo - not endorsed by VGJ"
 
 
 def build_demo() -> gr.Blocks:
@@ -33,24 +33,24 @@ def build_demo() -> gr.Blocks:
             baseline_state = gr.State([])
 
             with gr.Row():
-                enhanced_box = gr.Chatbot(
-                    height=450,
-                    type="messages",
-                    label="Enhanced (LoRA + FAISS)",
-                )
                 baseline_box = gr.Chatbot(
                     height=450,
                     type="messages",
                     label="Baseline (raw)",
                 )
+                enhanced_box = gr.Chatbot(
+                    height=450,
+                    type="messages",
+                    label="Enhanced (LoRA + FAISS)",
+                )
 
             textbox = gr.Textbox(
-                placeholder="Ask about Grand Junction…",
+                placeholder="Ask about Grand Junction...",
                 show_label=False,
                 container=False,
             )
 
-            gr.Markdown("Temp = 1.0")
+            gr.Markdown("Temp = 0.8")
 
             def submit(msg: str, hist_e: list, hist_b: list):
                 hist_e.append({"role": "user", "content": msg})
@@ -90,7 +90,7 @@ def build_demo() -> gr.Blocks:
 
             chatbox = gr.Chatbot(height=450, type="messages", label="Conversation")
             textbox = gr.Textbox(
-                placeholder="Ask about Grand Junction…",
+                placeholder="Ask about Grand Junction...",
                 show_label=False,
                 container=False,
             )

@@ -107,7 +107,7 @@ def _boot() -> tuple[
     CrossEncoder,
     pipeline,
 ]:
-    logger.info("Loading FAISS index and metadata …")
+    logger.info("Loading FAISS index and metadata ...")
     index: faiss.Index = load_index(CFG.index_path)
     raw_meta = [json.loads(l) for l in CFG.meta_path.read_text().splitlines()]
     texts = [_clean(m["text"]) for m in raw_meta]  # ← pre‑filter once
@@ -117,11 +117,11 @@ def _boot() -> tuple[
     logger.info(
         "Using device: %s (CUDA available: %s)", device, torch.cuda.is_available()
     )
-    logger.info("Initialising embedding & re‑rank models …")
+    logger.info("Initialising embedding & re-rank models ...")
     embedder = SentenceTransformer(CFG.embed_model, device=device)
     reranker = CrossEncoder(CFG.rerank_model, device=device)
 
-    logger.info("Loading LoRA‑merged generator …")
+    logger.info("Loading LoRA-merged generator ...")
     quant_cfg = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_quant_type="nf4",
@@ -205,7 +205,7 @@ def _too_similar(answer: str, passages: List[Tuple[float, str, str]]) -> bool:
         cos_sim = float(np.dot(ans_vec, src_vec))  # because both are unit vectors
         if cos_sim >= CFG.sim_threshold:
             logger.warning(
-                "Similarity %.2f ≥ %.2f – refusing/paraphrasing.",
+                "Similarity %.2f >= %.2f - refusing/paraphrasing.",
                 cos_sim,
                 CFG.sim_threshold,
             )
@@ -292,15 +292,15 @@ def _user_submit(msg: str, hist: List[dict[str, str]]) -> tuple[str, list]:
 #  Gradio UI
 # ──────────────────────────────────────────────────────────────────────────────
 page_title = (
-    "Unofficial Visit Grand Junction Demo – not endorsed by VGJ"  # <title> element
+    "Unofficial Visit Grand Junction Demo - not endorsed by VGJ"  # <title> element
 )
 
 with gr.Blocks(theme=gr.themes.Soft(), title=page_title) as demo:
     gr.Markdown(
         (
-            "## 💬 Unofficial Visit Grand Junction Demo Chatbot\n"
-            "<small>Portfolio prototype, **not** endorsed by Visit Grand Junction. "
-            "Content sourced from public VGJ blogs under a fair‑use rationale.</small>"
+            "## 💬 Unofficial Visit Grand Junction Demo Chatbot\n"
+            "<small>Portfolio prototype, **not** endorsed by Visit Grand Junction. "
+            "Content sourced from public VGJ blogs under a fair-use rationale.</small>"
         )
     )
 
@@ -308,7 +308,7 @@ with gr.Blocks(theme=gr.themes.Soft(), title=page_title) as demo:
 
     chatbox = gr.Chatbot(height=450, type="messages", label="Conversation")
     textbox = gr.Textbox(
-        placeholder="Ask about Grand Junction…",
+        placeholder="Ask about Grand Junction...",
         show_label=False,
         container=False,
     )
