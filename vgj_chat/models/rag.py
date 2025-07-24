@@ -28,7 +28,6 @@ from transformers import (
 
 from ..config import CFG
 from ..data.io import load_index, load_metadata
-from .guards import too_similar
 
 logger = logging.getLogger(__name__)
 
@@ -277,9 +276,6 @@ def answer_stream(
 
     final_answer = history[-1]["content"].strip()
 
-    if too_similar(final_answer, passages, EMBEDDER, CFG.sim_threshold):
-        final_answer = "Sorry, the answer is too similar to the source material."
-
     sources_md = "\n".join(f"[{i+1}] {url}" for i, (_s, _t, url) in enumerate(passages))
     history[-1]["content"] = f"{final_answer}\n\n**Sources**\n{sources_md}"
     yield history, history
@@ -306,9 +302,6 @@ def chat(question: str) -> str:
 
     generated = CHAT(prompt)[0]["generated_text"]
     answer = generated[len(prompt) :].strip()
-
-    if too_similar(answer, passages, EMBEDDER, CFG.sim_threshold):
-        answer = "Sorry, the answer is too similar to the source material."
 
     sources_md = "\n".join(f"[{i+1}] {url}" for i, (_s, _t, url) in enumerate(passages))
     return f"{answer}\n\n**Sources**\n{sources_md}"
