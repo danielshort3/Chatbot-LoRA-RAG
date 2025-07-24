@@ -46,6 +46,7 @@ def test_cli_compare_flag(monkeypatch, caplog):
     try:
         cli.main(["-c"])
         assert cli.CFG.compare_mode is True
+        assert config.CFG.compare_mode is True
         assert (
             "Compare mode enabled: launching dual-chat UI" in caplog.text
         )

@@ -5,7 +5,10 @@ import logging
 
 from dataclasses import replace
 
-from .config import CFG, Config
+import vgj_chat.config as config
+
+CFG = config.CFG
+Config = config.Config
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -22,6 +25,7 @@ def main(argv: list[str] | None = None) -> None:
     global CFG
     CFG = CFG.apply_cli_args(args)
     CFG = replace(CFG, compare_mode=args.compare)
+    config.CFG = CFG
     if CFG.compare_mode:
         logging.info("Compare mode enabled: launching dual-chat UI")
 
