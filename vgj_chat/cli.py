@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 
 from dataclasses import replace
 
@@ -21,6 +22,8 @@ def main(argv: list[str] | None = None) -> None:
     global CFG
     CFG = CFG.apply_cli_args(args)
     CFG = replace(CFG, compare_mode=args.compare)
+    if CFG.compare_mode:
+        logging.info("Compare mode enabled: launching dual-chat UI")
 
     from .ui.gradio_app import build_demo
 
