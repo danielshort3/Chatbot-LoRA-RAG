@@ -59,7 +59,7 @@ FAISS GPU acceleration has not been tested due to incompatible hardware. Set `VG
 
 ## Using a LoRA adapter
 
-After fine‑tuning the adapter it can be merged into a 4‑bit quantized model using `scripts/merge_lora.py`. The resulting model directory is loaded automatically when you launch the chat UI. Set `VGJ_LORA_DIR` if you want to load a different checkpoint before merging.
+After fine‑tuning the adapter it can be merged into a 4‑bit quantized model using `scripts/merge_lora.py`. The resulting model directory is loaded automatically when you launch the chat UI. Set `VGJ_LORA_DIR` if you want to load a different checkpoint before merging and `VGJ_MERGED_MODEL_DIR` to change the directory used for inference.
 
 ## Compare mode
 
@@ -72,6 +72,13 @@ python -m vgj_chat --hf-token <HF_TOKEN> --compare
 ## Docker
 
 Use `docker exec` to run the helper scripts inside the container as needed. The quick start section shows how to build and run the image.
+
+## SageMaker deployment
+
+After running the pipeline and producing `faiss.index`, `meta.jsonl` and the
+merged 4‑bit model directory, build `Dockerfile.sagemaker` and push the image to
+ECR. Copy the artifacts into a `model/` directory before building so the
+container includes everything required for inference on SageMaker.
 
 ## Configuration
 

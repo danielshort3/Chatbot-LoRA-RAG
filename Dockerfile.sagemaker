@@ -1,0 +1,25 @@
+FROM pytorch/pytorch:2.7.1-cuda12.8-cudnn9-devel
+
+WORKDIR /app
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends git build-essential && \
+    rm -rf /var/lib/apt/lists/*
+
+# install dependencies including bitsandbytes
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+RUN pip install --no-cache-dir .
+
+# copy model artifacts expected at build time
+COPY model/ /opt/ml/model/
+
+ENV VGJ_INDEX_PATH=/opt/ml/model/faiss.index
+ENV VGJ_META_PATH=/opt/ml/model/meta.jsonl
+ENV VGJ_MERGED_MODEL_DIR=/opt/ml/model/mistral-merged-4bit
+
+EXPOSE 7860
+CMD ["python", "-m", "vgj_chat"]

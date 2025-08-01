@@ -18,7 +18,6 @@ import faiss  # type: ignore
 import gradio as gr
 import numpy as np  # type: ignore
 import torch  # type: ignore
-from peft import PeftModel  # type: ignore
 from sentence_transformers import CrossEncoder, SentenceTransformer
 from transformers import (
     AutoModelForCausalLM,
@@ -121,22 +120,20 @@ def _boot() -> tuple[
     embedder = SentenceTransformer(CFG.embed_model, device=device)
     reranker = CrossEncoder(CFG.rerank_model, device=device)
 
-    logger.info("Loading LoRA-merged generator ...")
+    logger.info("Loading quantised model ...")
     quant_cfg = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_quant_type="nf4",
         bnb_4bit_compute_dtype=torch.float16,
         bnb_4bit_use_double_quant=True,
     )
-    tokenizer = AutoTokenizer.from_pretrained(CFG.base_model, use_fast=True)
-    base = AutoModelForCausalLM.from_pretrained(
-        CFG.base_model,
+    tokenizer = AutoTokenizer.from_pretrained(str(CFG.merged_model_dir), use_fast=True)
+    merged = AutoModelForCausalLM.from_pretrained(
+        str(CFG.merged_model_dir),
         quantization_config=quant_cfg,
         device_map="auto",
         torch_dtype=torch.float16,
     )
-    lora = PeftModel.from_pretrained(base, str(CFG.lora_dir))
-    merged = lora.merge_and_unload()
 
     chat_pipe = pipeline(
         "text-generation",
