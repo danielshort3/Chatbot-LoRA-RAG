@@ -8,6 +8,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # ----- dependency layer -----
+# includes bitsandbytes for 4-bit quantisation
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt

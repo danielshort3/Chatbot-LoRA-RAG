@@ -6,6 +6,7 @@ STEPS = [
     ["python", "scripts/build_index.py"],
     ["python", "scripts/build_dataset.py"],
     ["python", "scripts/finetune.py"],
+    ["python", "scripts/merge_lora.py"],
     ["python", "-m", "vgj_chat", "--compare"],
 ]
 
