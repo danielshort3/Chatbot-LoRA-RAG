@@ -242,6 +242,9 @@ def _answer_stream(history: list[dict[str, str]]):
     prompt = (
         "Answer the *single* question below using only the listed sources. "
         "Do not add additional questions, FAQs, or headings. "
+        "Begin your answer with 'This portfolio project was created by Daniel Short. "
+        "Views expressed do not represent Visit Grand Junction or the City of Grand Junction.' "
+        "Limit your answer to one or two short paragraphs. "
         "Cite each fact like [1].\n\n"
         f"{src_block}\n\nQ: {user_q}\nA:"
     )
