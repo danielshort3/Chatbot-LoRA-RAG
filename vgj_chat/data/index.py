@@ -51,10 +51,13 @@ def build_index(
             nltk.data.find(f"tokenizers/{res}")
         except LookupError:  # pragma: no cover - depends on user env
             nltk.download(res, quiet=True)
-    if not torch.cuda.is_available():  # pragma: no cover - requires GPU
-        raise RuntimeError("CUDA GPU required for index building")
-    logger.info("Using CUDA for embeddings")
-    embedder = SentenceTransformer(embed_model, device="cuda")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    logger.info(
+        "Using %s for embeddings (CUDA available: %s)",
+        device,
+        torch.cuda.is_available(),
+    )
+    embedder = SentenceTransformer(embed_model, device=device)
     index = None
     meta_f = meta_path.open("w")
     files = sorted(txt_dir.glob("*.txt"))
