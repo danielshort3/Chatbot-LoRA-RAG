@@ -1,5 +1,7 @@
 import argparse
 import subprocess
+import shutil
+from pathlib import Path
 
 STEPS = [
     ["python", "scripts/crawl.py"],
@@ -19,14 +21,34 @@ def main() -> None:
         default=None,
         help="Limit number of pages to crawl",
     )
+    parser.add_argument(
+        "--launch-chatbot",
+        dest="launch_chatbot",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Launch the chat UI after finishing the pipeline",
+    )
     args = parser.parse_args()
 
     steps = STEPS.copy()
     if args.limit is not None:
         steps[0] = ["python", "scripts/crawl.py", "--limit", str(args.limit)]
+    if not args.launch_chatbot:
+        steps.pop()
 
     for cmd in steps:
         subprocess.run(cmd, check=True)
+
+    model_dir = Path("model")
+    model_dir.mkdir(exist_ok=True)
+    shutil.copy("faiss.index", model_dir / "faiss.index")
+    shutil.copy("meta.jsonl", model_dir / "meta.jsonl")
+    merged_src = Path("mistral-merged-4bit")
+    merged_dst = model_dir / merged_src.name
+    if merged_dst.exists():
+        shutil.rmtree(merged_dst)
+    if merged_src.exists():
+        shutil.copytree(merged_src, merged_dst)
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -34,18 +34,9 @@ logger = logging.getLogger(__name__)
 
 
 def load_index(path: Path) -> faiss.Index:
-    """Load a FAISS index from *path* using GPU when available."""
+    """Load a FAISS index from *path*."""
 
-    index = faiss.read_index(str(path))
-
-    if CFG.faiss_cuda and getattr(faiss, "get_num_gpus", lambda: 0)() > 0:
-        try:
-            res = faiss.StandardGpuResources()
-            index = faiss.index_cpu_to_gpu(res, 0, index)
-        except Exception as exc:  # pragma: no cover - GPU runtime errors
-            logger.warning("Falling back to CPU index due to GPU error: %s", exc)
-
-    return index
+    return faiss.read_index(str(path))
 
 
 def load_metadata(path: Path) -> Tuple[List[str], List[str]]:
