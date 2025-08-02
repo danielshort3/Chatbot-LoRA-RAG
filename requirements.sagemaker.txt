@@ -1,7 +1,0 @@
-faiss-cpu==1.8.0
-bitsandbytes==0.45.5
-accelerate==1.6.0
-git+https://github.com/huggingface/transformers.git@v4.51.0
-trl
-peft
-
