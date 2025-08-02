@@ -23,16 +23,6 @@ for mod_name in ["faiss", "sentence_transformers", "transformers", "peft", "grad
 
 # faiss helpers used in code
 sys.modules["faiss"].read_index = lambda *a, **k: None
-sys.modules["faiss"].get_num_gpus = lambda: 0
-
-
-class DummyStandardGpuResources:
-    def __init__(self, *a, **k):
-        pass
-
-
-sys.modules["faiss"].StandardGpuResources = DummyStandardGpuResources
-sys.modules["faiss"].index_cpu_to_gpu = lambda res, device, index: index
 
 sys.modules["sentence_transformers"].CrossEncoder = object
 sys.modules["sentence_transformers"].SentenceTransformer = object

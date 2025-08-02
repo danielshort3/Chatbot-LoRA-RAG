@@ -11,9 +11,8 @@ requires-python = ">=3.10"
 license = {text = "MIT"}
 dependencies = [
     "gradio",
-    "faiss-gpu-cu12==1.8.0.2",
+    "faiss-cpu==1.8.0",
     "sentence-transformers",
-    "torch",
     "bitsandbytes",
     "peft",
     "datasets",
@@ -22,7 +21,8 @@ dependencies = [
     "trl",
     "nltk",
     "tqdm",
-    "numpy",
+    "numpy<2",
+    "build",
     "aiohttp",
     "requests",
     "beautifulsoup4",
