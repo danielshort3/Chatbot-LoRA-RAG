@@ -1,8 +1,7 @@
 import importlib
 import subprocess
 import sys
-from pathlib import Path
-from types import ModuleType, SimpleNamespace
+from types import ModuleType
 
 
 def test_modules_import_from_wheel(tmp_path):
@@ -42,30 +41,35 @@ def test_modules_import_from_wheel(tmp_path):
     sys.modules.setdefault("trl", trl_mod)
 
     wheel_dir = tmp_path / "wheel"
-    subprocess.run([
-        sys.executable,
-        "-m",
-        "build",
-        "--wheel",
-        "--outdir",
-        str(wheel_dir),
-    ], check=True)
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "build",
+            "--wheel",
+            "--outdir",
+            str(wheel_dir),
+        ],
+        check=True,
+    )
     wheel = next(wheel_dir.glob("vgj_chat-*.whl"))
     install_dir = tmp_path / "install"
-    subprocess.run([
-        sys.executable,
-        "-m",
-        "pip",
-        "install",
-        "--no-deps",
-        "--target",
-        str(install_dir),
-        str(wheel),
-    ], check=True)
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "--no-deps",
+            "--target",
+            str(install_dir),
+            str(wheel),
+        ],
+        check=True,
+    )
     sys.path.insert(0, str(install_dir))
     try:
         importlib.import_module("vgj_chat.models.rag")
         importlib.import_module("vgj_chat.models.finetune")
     finally:
         sys.path.remove(str(install_dir))
-
