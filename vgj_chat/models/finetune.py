@@ -43,26 +43,21 @@ def run_finetune() -> None:
         login(token=hf_token)
     tok = AutoTokenizer.from_pretrained(BASE_MODEL, use_fast=True, token=hf_token)
     tok.pad_token = tok.eos_token
-    if torch.cuda.is_available():
-        bnb_cfg = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch.float16,
-            bnb_4bit_use_double_quant=True,
-        )
-        base = AutoModelForCausalLM.from_pretrained(
-            BASE_MODEL,
-            quantization_config=bnb_cfg,
-            device_map={"": 0},
-            torch_dtype=torch.float16,
-            token=hf_token,
-        )
-    else:
-        base = AutoModelForCausalLM.from_pretrained(
-            BASE_MODEL,
-            torch_dtype=torch.float32,
-            token=hf_token,
-        )
+    if not torch.cuda.is_available():  # pragma: no cover - requires GPU
+        raise RuntimeError("CUDA GPU required for fine-tuning")
+    bnb_cfg = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_compute_dtype=torch.float16,
+        bnb_4bit_use_double_quant=True,
+    )
+    base = AutoModelForCausalLM.from_pretrained(
+        BASE_MODEL,
+        quantization_config=bnb_cfg,
+        device_map={"": 0},
+        torch_dtype=torch.float16,
+        token=hf_token,
+    )
     base = prepare_model_for_kbit_training(base)
     lora_cfg = LoraConfig(
         r=LORA_R,

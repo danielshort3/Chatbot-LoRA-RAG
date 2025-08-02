@@ -9,8 +9,6 @@ from pathlib import Path
 
 import torch
 import trafilatura
-from datasets import load_dataset
-from sentence_transformers import SentenceTransformer
 from tqdm.auto import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from huggingface_hub import login
@@ -26,13 +24,15 @@ MANUAL_QA_JL = Path("vgj_lora_dataset.jsonl")
 AUTO_QA_JL = Path("vgj_auto_dataset.jsonl")
 COMBINED_QA_JL = Path("vgj_combined.jsonl")
 
-# authenticate for gated base model if token available
 HF_TOKEN = os.getenv("VGJ_HF_TOKEN")
 if HF_TOKEN:
     login(token=HF_TOKEN)
 
-tok = AutoTokenizer.from_pretrained(LLM_NAME, use_fast=True, token=HF_TOKEN)
-if torch.cuda.is_available():
+
+def _load_llm() -> tuple[AutoTokenizer, AutoModelForCausalLM]:
+    if not torch.cuda.is_available():  # pragma: no cover - requires GPU
+        raise RuntimeError("CUDA GPU required for auto-QA generation")
+    tok = AutoTokenizer.from_pretrained(LLM_NAME, use_fast=True, token=HF_TOKEN)
     quant_cfg = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_quant_type="nf4",
@@ -46,15 +46,10 @@ if torch.cuda.is_available():
         device_map={"": 0},
         token=HF_TOKEN,
     )
-else:
-    llm = AutoModelForCausalLM.from_pretrained(
-        LLM_NAME,
-        torch_dtype=torch.float32,
-        token=HF_TOKEN,
-    )
+    return tok, llm
 
 
-def gen_question(passage: str) -> str:
+def gen_question(passage: str, tok, llm) -> str:
     sys = (
         "You are a helpful travel assistant. Read the PASSAGE and invent one "
         "concise, natural-sounding traveler question that could be answered "
@@ -75,6 +70,7 @@ BOILER_PAT = re.compile(
 
 def build_auto_dataset() -> None:
     collapse = lambda s: re.sub(r"\s+", " ", s).strip()
+    tok, llm = _load_llm()
     auto_examples = []
     skipped = 0
     for txt_f in tqdm(sorted(TXT_DIR.glob("*.txt")), desc="auto-QA", unit="page"):
@@ -85,7 +81,7 @@ def build_auto_dataset() -> None:
         if not paras:
             continue
         passage = "\n\n".join(paras)
-        question = gen_question(passage)
+        question = gen_question(passage, tok, llm)
         words, answer_words = 0, []
         for p in paras:
             if words + len(p.split()) > ANSWER_TOK_CAP:

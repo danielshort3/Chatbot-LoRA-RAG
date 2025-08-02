@@ -40,8 +40,11 @@ The default model `mistralai/Mistral-7B-Instruct-v0.2` is gated on Hugging Face,
 Run all preparation steps (crawl pages, build the index, fine‑tune and merge) in one command:
 
 ```bash
-VGJ_FAISS_CUDA=false python scripts/run_pipeline.py
+python scripts/run_pipeline.py
 ```
+
+Pass `--launch-chatbot false` to skip opening the chat UI once the pipeline
+completes.
 
 Set `VGJ_HF_TOKEN` so the scripts can download the base model. Each script in `scripts/` can also be run individually.
 
@@ -55,7 +58,9 @@ Scripts overview:
 4. `finetune.py` – train the LoRA adapter
 5. `merge_lora.py` – merge the adapter into a 4‑bit model
 
-FAISS GPU acceleration has not been tested due to incompatible hardware. Set `VGJ_FAISS_CUDA=false` (or `--faiss-cuda false`) to run indexing on the CPU while the rest of the pipeline uses CUDA.
+The pipeline builds the FAISS index on the CPU so no special GPU support is
+required. All other stages – auto‑QA generation, fine‑tuning and model
+merging – require a CUDA‑capable GPU.
 
 ## Using a LoRA adapter
 
@@ -78,7 +83,8 @@ Use `docker exec` to run the helper scripts inside the container as needed. The 
 After running the pipeline and producing `faiss.index`, `meta.jsonl` and the
 merged 4‑bit model directory, build `Dockerfile.sagemaker` and push the image to
 ECR. Copy the artifacts into a `model/` directory before building so the
-container includes everything required for inference on SageMaker.
+container includes everything required for inference on SageMaker. Dependency
+installation uses `requirements.sagemaker.txt` during the build.
 
 ## Configuration
 
