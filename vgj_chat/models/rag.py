@@ -82,6 +82,10 @@ def _boot() -> tuple[
         bnb_4bit_compute_dtype=torch.float16,
         bnb_4bit_use_double_quant=True,
     )
+    if not CFG.merged_model_dir.exists():
+        raise FileNotFoundError(
+            f"Expected merged model directory at {CFG.merged_model_dir}"
+        )
     tokenizer = AutoTokenizer.from_pretrained(str(CFG.merged_model_dir), use_fast=True)
     merged = AutoModelForCausalLM.from_pretrained(
         str(CFG.merged_model_dir),
