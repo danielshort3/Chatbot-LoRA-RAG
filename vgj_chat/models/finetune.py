@@ -118,7 +118,6 @@ def run_finetune() -> None:
                 early_stopping_patience=PATIENCE, early_stopping_threshold=0.0
             )
         ],
-        label_names=[],
     )
     trainer.train()
     model.save_pretrained(CHECKPOINT_DIR)
