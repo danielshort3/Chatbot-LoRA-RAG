@@ -31,3 +31,5 @@ data/
 faiss.index
 meta.jsonl
 *.env
+/model
+*.gz
