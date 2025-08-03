@@ -71,6 +71,7 @@ def run_finetune() -> None:
         task_type="CAUSAL_LM",
     )
     model = get_peft_model(base, lora_cfg)
+    model.config.use_cache = False
 
     def to_chat(ex):
         user = ex["instruction"].strip()
