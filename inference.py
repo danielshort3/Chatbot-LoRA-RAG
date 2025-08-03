@@ -1,34 +1,52 @@
 import json
 import os
-from typing import Any, Tuple
+from typing import Any, Dict
+
+import faiss
+import torch
+from sagemaker_inference import model_server
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
-def model_fn(model_dir: str) -> Any:
-    """Load model artifacts from ``model_dir`` and prepare for inference."""
-    os.environ.setdefault(
-        "VGJ_MERGED_MODEL_DIR", os.path.join(model_dir, "mistral-merged-4bit")
+def model_fn(model_dir: str) -> Dict[str, Any]:
+    model = AutoModelForCausalLM.from_pretrained(
+        model_dir,
+        torch_dtype=torch.float16,
+        device_map="auto",
+        trust_remote_code=True,
     )
-    os.environ.setdefault("VGJ_INDEX_PATH", os.path.join(model_dir, "faiss.index"))
-    os.environ.setdefault("VGJ_META_PATH", os.path.join(model_dir, "meta.jsonl"))
-    from vgj_chat.models import rag
-
-    return rag
-
-
-def input_fn(request_body: bytes, request_content_type: str) -> str:
-    if request_content_type == "application/json":
-        data = json.loads(request_body)
-        return data.get("question") or data.get("inputs") or ""
-    if request_content_type == "text/plain":
-        return request_body.decode("utf-8")
-    raise ValueError(f"Unsupported content type: {request_content_type}")
+    tok = AutoTokenizer.from_pretrained(model_dir, use_fast=True)
+    index = faiss.read_index(os.path.join(model_dir, "faiss.index"))
+    meta_path = os.path.join(model_dir, "meta.jsonl")
+    meta = [json.loads(line) for line in open(meta_path)]
+    return {"lm": model, "tok": tok, "index": index, "meta": meta}
 
 
-def predict_fn(input_data: str, model: Any) -> str:
-    return model.chat(input_data)
+def predict_fn(data, ctx):
+    mdl = ctx
+    prompt = data["inputs"]
+    top_k = data.get("top_k", 3)
+
+    emb_query = (
+        mdl["lm"]
+        .get_input_embeddings()(
+            torch.tensor(mdl["tok"](prompt)["input_ids"]).to("cuda")
+        )
+        .mean(0)
+        .detach()
+        .cpu()
+        .numpy()
+    )
+
+    _distances, indices = mdl["index"].search(emb_query[None, :], top_k)
+    retrieved = "\n".join(mdl["meta"][idx]["text"] for idx in indices[0])
+
+    aug_prompt = f"{retrieved}\n\n### Question:\n{prompt}\n### Answer:"
+    input_ids = mdl["tok"](aug_prompt, return_tensors="pt").to("cuda")
+    gen_ids = mdl["lm"].generate(**input_ids, max_new_tokens=256)
+    answer = mdl["tok"].decode(gen_ids[0], skip_special_tokens=True)
+    return {"generated_text": answer}
 
 
-def output_fn(prediction: str, accept: str) -> Tuple[str, str]:
-    if accept == "application/json":
-        return json.dumps({"answer": prediction}), accept
-    return prediction, "text/plain"
+if __name__ == "__main__":
+    model_server.start_model_server(handler_service=predict_fn, model_fn=model_fn)
