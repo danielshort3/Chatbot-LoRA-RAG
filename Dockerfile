@@ -5,10 +5,14 @@ FROM pytorch/pytorch:2.2.2-cuda12.1-cudnn8-devel
 COPY requirements.sagemaker.txt /tmp/req.txt
 RUN pip install --no-cache-dir -r /tmp/req.txt && rm /tmp/req.txt
 
-################  Copy code and model  #########################
-COPY model/ /opt/ml/model/
-COPY . /app
+################  Copy application code  ########################
 WORKDIR /app
+COPY serve.py .
+COPY inference.py .
+COPY gradio_vgj_chat.py .
+COPY pyproject.toml .
+COPY README.md .
+COPY vgj_chat ./vgj_chat
 RUN pip install --no-cache-dir .
 
 ################  Expose port & launch  ########################
