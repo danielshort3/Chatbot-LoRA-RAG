@@ -1,22 +1,16 @@
-FROM pytorch/pytorch:2.7.1-cuda12.8-cudnn9-devel
+################  Base image without TorchServe  ###############
+FROM pytorch/pytorch:2.2.2-cuda12.1-cudnn-devel
 
+################  Install Python deps  #########################
+COPY requirements.sagemaker.txt /tmp/req.txt
+RUN pip install --no-cache-dir -r /tmp/req.txt && rm /tmp/req.txt
 
+################  Copy code and model  #########################
+COPY model/ /opt/ml/model/
+COPY . /app
 WORKDIR /app
-
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends git build-essential && \
-    rm -rf /var/lib/apt/lists/*
-
-# ----- dependency layer -----
-# includes bitsandbytes for 4-bit quantisation
-COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
-
-# ----- source code -----
-COPY . .
 RUN pip install --no-cache-dir .
 
-
-EXPOSE 7860
-CMD ["python", "-m", "vgj_chat"]
+################  Expose port & launch  ########################
+EXPOSE 8080
+CMD ["python", "serve.py"]
