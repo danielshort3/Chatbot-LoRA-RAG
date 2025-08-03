@@ -1,6 +1,6 @@
 import argparse
 import subprocess
-import shutil
+import tarfile
 from pathlib import Path
 
 STEPS = [
@@ -46,16 +46,15 @@ def main() -> None:
     for cmd in steps:
         subprocess.run(cmd, check=True)
 
-    model_dir = Path("model")
-    model_dir.mkdir(exist_ok=True)
-    shutil.copy("faiss.index", model_dir / "faiss.index")
-    shutil.copy("meta.jsonl", model_dir / "meta.jsonl")
     merged_src = Path("mistral-merged-4bit")
-    merged_dst = model_dir / merged_src.name
-    if merged_dst.exists():
-        shutil.rmtree(merged_dst)
-    if merged_src.exists():
-        shutil.copytree(merged_src, merged_dst)
+    archive = Path("mistral-rag.tar.gz")
+    with tarfile.open(archive, "w:gz") as tar:
+        if merged_src.exists():
+            for item in merged_src.iterdir():
+                tar.add(item, arcname=item.name)
+        tar.add("faiss.index", arcname="faiss.index")
+        tar.add("meta.jsonl", arcname="meta.jsonl")
+    print(f"Created {archive}")
 
 
 if __name__ == "__main__":  # pragma: no cover
