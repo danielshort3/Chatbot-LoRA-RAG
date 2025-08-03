@@ -50,8 +50,7 @@ def main() -> None:
     archive = Path("mistral-rag.tar.gz")
     with tarfile.open(archive, "w:gz") as tar:
         if merged_src.exists():
-            for item in merged_src.iterdir():
-                tar.add(item, arcname=item.name)
+            tar.add(merged_src, arcname=merged_src.name)
         tar.add("faiss.index", arcname="faiss.index")
         tar.add("meta.jsonl", arcname="meta.jsonl")
     print(f"Created {archive}")
