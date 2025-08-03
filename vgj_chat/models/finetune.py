@@ -72,6 +72,9 @@ def run_finetune() -> None:
     )
     model = get_peft_model(base, lora_cfg)
     model.config.use_cache = False
+    model.gradient_checkpointing_enable(
+        gradient_checkpointing_kwargs={"use_reentrant": False}
+    )
 
     def to_chat(ex):
         user = ex["instruction"].strip()
