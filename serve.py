@@ -34,7 +34,14 @@ def invoke(p: Prompt):
     ).mean(0).detach().cpu().numpy()
     _, ids = INDEX.search(query_emb.reshape(1, -1), 5)
     context = " ".join(METADATA[i]["text"] for i in ids[0])
-    prompt = f"{context}\n\nUser: {p.inputs}\nAssistant:"
+    prompt = (
+        "Answer the *single* question below using only the listed sources. "
+        "Do not add additional questions, FAQs, or headings. "
+        "Begin your answer with 'This portfolio project was created by Daniel Short. "
+        "Views expressed do not represent Visit Grand Junction or the City of Grand Junction.' "
+        "Limit your answer to one or two short paragraphs.\n\n"
+        f"{context}\nUser: {p.inputs}\nAssistant:"
+    )
     output = MODEL.generate(
         **TOKENIZER(prompt, return_tensors="pt").to(MODEL.device),
         max_new_tokens=200,

@@ -14,9 +14,6 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY . .
 RUN pip install --no-cache-dir .
 
-# copy model artifacts expected at build time
-COPY model/ /opt/ml/model/
-
 ENV VGJ_INDEX_PATH=/opt/ml/model/faiss.index
 ENV VGJ_META_PATH=/opt/ml/model/meta.jsonl
 ENV VGJ_MERGED_MODEL_DIR=/opt/ml/model/mistral-merged-4bit

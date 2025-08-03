@@ -242,8 +242,7 @@ def _answer_stream(history: list[dict[str, str]]):
         "Do not add additional questions, FAQs, or headings. "
         "Begin your answer with 'This portfolio project was created by Daniel Short. "
         "Views expressed do not represent Visit Grand Junction or the City of Grand Junction.' "
-        "Limit your answer to one or two short paragraphs. "
-        "Cite each fact like [1].\n\n"
+        "Limit your answer to one or two short paragraphs.\n\n"
         f"{src_block}\n\nQ: {user_q}\nA:"
     )
 
