@@ -1,5 +1,6 @@
 .git
 archive
+model/
 tests
 __pycache__
 *.pyc
