@@ -127,19 +127,18 @@ async def fetch(
 
 async def worker(
     name: str,
-    idx: int,
     session: aiohttp.ClientSession,
     q: asyncio.Queue[str | None],
     seen: set[str],
     delay: float,
     nets: set[str],
     dis: dict[str, list[str]],
+    bar: tqdm,
     counter: dict[str, int] | None = None,
     limit: int | None = None,
     stop_event: asyncio.Event | None = None,
 ) -> None:
     rl = RateLimiter(delay)
-    bar = tqdm(total=0, position=idx + 1, desc=name, unit="pg", leave=True)
     while True:
         url = await q.get()
         q.task_done()
@@ -209,17 +208,18 @@ async def crawl(seed: list[str], limit: int | None = None) -> None:
         "Connection": "keep-alive",
     }
     async with aiohttp.ClientSession(headers=headers) as session:
+        bar = tqdm(total=limit, unit="pg")
         tasks = [
             asyncio.create_task(
                 worker(
                     f"w{i}",
-                    i,
                     session,
                     q,
                     seen,
                     CRAWL_DELAY,
                     nets,
                     dis,
+                    bar,
                     counter,
                     limit,
                     stop_event,
@@ -234,3 +234,4 @@ async def crawl(seed: list[str], limit: int | None = None) -> None:
         for _ in tasks:
             q.put_nowait(None)
         await asyncio.gather(*tasks, return_exceptions=True)
+        bar.close()
