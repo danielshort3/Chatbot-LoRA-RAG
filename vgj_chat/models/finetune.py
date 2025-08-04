@@ -22,7 +22,7 @@ from trl import SFTTrainer
 BASE_MODEL = "mistralai/Mistral-7B-Instruct-v0.2"
 # dataset built by ``vgj_chat.data.dataset.build_auto_dataset``
 # automatically generated Q&A pairs
-AUTO_QA_JL = Path("vgj_auto_dataset.jsonl")
+AUTO_QA_JL = Path("data/dataset/vgj_auto_dataset.jsonl")
 CHECKPOINT_DIR = Path("data/lora-vgj-checkpoint")
 MODEL_CACHE = Path("data/model_cache")
 
@@ -83,13 +83,12 @@ def run_finetune() -> None:
     model = get_peft_model(base, lora_cfg)
 
     def to_chat(ex):
-        user = ex["instruction"].strip()
-        if ex["input"]:
-            user += "\n" + ex["input"].strip()
-        return {"text": f"<s>[INST] {user} [/INST] {ex['output'].strip()} </s>"}
+        return {
+            "text": f"<s>[INST] {ex['input'].strip()} [/INST] {ex['output'].strip()} </s>"
+        }
 
     dataset = load_dataset("json", data_files=str(AUTO_QA_JL), split="train").map(
-        to_chat, remove_columns=["instruction", "input", "output"]
+        to_chat, remove_columns=["input", "output"]
     )
     train_idx, eval_idx = train_test_split(
         list(range(len(dataset))), test_size=0.1, random_state=42

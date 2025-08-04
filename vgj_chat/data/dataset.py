@@ -20,7 +20,8 @@ ANSWER_TOK_CAP = 220
 TXT_DIR = Path("data/html_txt")
 RAW_HTML_DIR = Path("data/raw_html")
 
-AUTO_QA_JL = Path("vgj_auto_dataset.jsonl")
+# store auto-generated pairs under data/dataset/
+AUTO_QA_JL = Path("data/dataset/vgj_auto_dataset.jsonl")
 MODEL_CACHE = Path("data/model_cache")
 
 # authenticate for gated base model if token available
@@ -99,9 +100,7 @@ def build_auto_dataset() -> None:
         if BOILER_PAT.search(answer):
             skipped += 1
             continue
-        auto_examples.append(
-            {"instruction": question, "input": passage, "output": answer}
-        )
+        auto_examples.append({"input": question, "output": answer})
     with AUTO_QA_JL.open("w") as f:
         for ex in auto_examples:
             f.write(json.dumps(ex) + "\n")
