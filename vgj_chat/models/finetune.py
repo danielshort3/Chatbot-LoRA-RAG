@@ -22,8 +22,9 @@ from huggingface_hub import login
 BASE_MODEL = "mistralai/Mistral-7B-Instruct-v0.2"
 # dataset built by ``vgj_chat.data.dataset.build_auto_dataset``
 # combines manual and automatically generated Q&A pairs
-COMBINED_QA_JL = "vgj_combined.jsonl"
-CHECKPOINT_DIR = "lora-vgj-checkpoint"
+COMBINED_QA_JL = Path("data/vgj_combined.jsonl")
+CHECKPOINT_DIR = Path("data/lora-vgj-checkpoint")
+MODEL_CACHE = Path("data/model_cache")
 
 LORA_R = 16
 LORA_ALPHA = 32
@@ -38,10 +39,16 @@ LR = 2e-4
 
 
 def run_finetune() -> None:
+    if CHECKPOINT_DIR.exists():
+        print(f"{CHECKPOINT_DIR} exists; skipping fine-tune")
+        return
     hf_token = os.getenv("VGJ_HF_TOKEN")
     if hf_token:
         login(token=hf_token)
-    tok = AutoTokenizer.from_pretrained(BASE_MODEL, use_fast=True, token=hf_token)
+    CHECKPOINT_DIR.parent.mkdir(parents=True, exist_ok=True)
+    tok = AutoTokenizer.from_pretrained(
+        BASE_MODEL, use_fast=True, token=hf_token, cache_dir=MODEL_CACHE
+    )
     tok.pad_token = tok.eos_token
     if torch.cuda.is_available():
         bnb_cfg = BitsAndBytesConfig(
@@ -56,12 +63,14 @@ def run_finetune() -> None:
             device_map={"": 0},
             torch_dtype=torch.float16,
             token=hf_token,
+            cache_dir=MODEL_CACHE,
         )
     else:
         base = AutoModelForCausalLM.from_pretrained(
             BASE_MODEL,
             torch_dtype=torch.float32,
             token=hf_token,
+            cache_dir=MODEL_CACHE,
         )
     base = prepare_model_for_kbit_training(base)
     lora_cfg = LoraConfig(
@@ -79,7 +88,7 @@ def run_finetune() -> None:
             user += "\n" + ex["input"].strip()
         return {"text": f"<s>[INST] {user} [/INST] {ex['output'].strip()} </s>"}
 
-    dataset = load_dataset("json", data_files=COMBINED_QA_JL, split="train").map(
+    dataset = load_dataset("json", data_files=str(COMBINED_QA_JL), split="train").map(
         to_chat, remove_columns=["instruction", "input", "output"]
     )
     train_idx, eval_idx = train_test_split(
@@ -88,7 +97,7 @@ def run_finetune() -> None:
     train_set = dataset.select(train_idx)
     eval_set = dataset.select(eval_idx)
     train_args = TrainingArguments(
-        output_dir=CHECKPOINT_DIR,
+        output_dir=str(CHECKPOINT_DIR),
         per_device_train_batch_size=BATCH_PER_GPU,
         gradient_accumulation_steps=GRAD_ACC_STEPS,
         num_train_epochs=EPOCHS,

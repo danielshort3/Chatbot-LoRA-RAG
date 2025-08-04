@@ -14,11 +14,11 @@ class Config:
     """Application configuration."""
 
     # paths
-    index_path: Path = Path("faiss.index")
-    meta_path: Path = Path("meta.jsonl")
-    lora_dir: Path = Path("lora-vgj-checkpoint")
+    index_path: Path = Path("data/faiss.index")
+    meta_path: Path = Path("data/meta.jsonl")
+    lora_dir: Path = Path("data/lora-vgj-checkpoint")
     # directory containing the merged 4-bit model
-    merged_model_dir: Path = Path("mistral-merged-4bit")
+    merged_model_dir: Path = Path("data/mistral-merged-4bit")
 
     # models
     base_model: str = "mistralai/Mistral-7B-Instruct-v0.2"

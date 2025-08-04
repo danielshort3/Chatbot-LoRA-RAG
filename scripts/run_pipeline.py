@@ -46,13 +46,14 @@ def main() -> None:
     for cmd in steps:
         subprocess.run(cmd, check=True)
 
-    merged_src = Path("mistral-merged-4bit")
-    archive = Path("mistral-rag.tar.gz")
+    merged_src = Path("data/mistral-merged-4bit")
+    archive = Path("data/mistral-rag.tar.gz")
+    archive.parent.mkdir(parents=True, exist_ok=True)
     with tarfile.open(archive, "w:gz") as tar:
         if merged_src.exists():
             tar.add(merged_src, arcname=merged_src.name)
-        tar.add("faiss.index", arcname="faiss.index")
-        tar.add("meta.jsonl", arcname="meta.jsonl")
+        tar.add("data/faiss.index", arcname="faiss.index")
+        tar.add("data/meta.jsonl", arcname="meta.jsonl")
     print(f"Created {archive}")
 
 
