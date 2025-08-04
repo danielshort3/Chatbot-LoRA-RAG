@@ -9,7 +9,6 @@ import torch
 from datasets import load_dataset
 from huggingface_hub import login
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
-from sklearn.model_selection import train_test_split
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -17,6 +16,12 @@ from transformers import (
     EarlyStoppingCallback,
     TrainingArguments,
 )
+try:  # transformers is stubbed in tests
+    from transformers import TrainerCallback
+except Exception:  # pragma: no cover - fallback for minimal stubs
+    class TrainerCallback:  # type: ignore
+        pass
+
 from trl import SFTTrainer
 
 BASE_MODEL = "mistralai/Mistral-7B-Instruct-v0.2"
@@ -81,20 +86,72 @@ def run_finetune() -> None:
         task_type="CAUSAL_LM",
     )
     model = get_peft_model(base, lora_cfg)
+    # disable cache to avoid incompatibilities with gradient checkpointing
+    model.config.use_cache = False
+    # show which parameters will receive updates
+    model.print_trainable_parameters()
 
-    def to_chat(ex):
-        return {
-            "text": f"<s>[INST] {ex['input'].strip()} [/INST] {ex['output'].strip()} </s>"
-        }
+    class GradDebugCallback(TrainerCallback):
+        """Callback to print gradient norms and track parameter updates."""
 
-    dataset = load_dataset("json", data_files=str(AUTO_QA_JL), split="train").map(
-        to_chat, remove_columns=["input", "output"]
+        def __init__(self, model: torch.nn.Module) -> None:
+            self.model = model
+            # snapshot of initial parameters to verify updates at the end
+            self._initial = {
+                n: p.detach().clone()
+                for n, p in model.named_parameters()
+                if p.requires_grad
+            }
+
+        def on_backward_end(self, args, state, control, **kwargs):
+            norms: dict[str, float] = {}
+            for name, p in self.model.named_parameters():
+                if p.requires_grad and p.grad is not None:
+                    norms[name] = float(p.grad.detach().norm())
+            total = sum(g ** 2 for g in norms.values()) ** 0.5
+            print(f"[GradDebug] step {state.global_step} grad_norm={total:.6f}")
+            # print a few individual layer norms to confirm non-zero grads
+            for n, g in list(norms.items())[:3]:
+                print(f"[GradDebug]   {n} grad_norm={g:.6f}")
+            return control
+
+        def on_train_end(self, args, state, control, **kwargs):
+            updated = False
+            for name, p in self.model.named_parameters():
+                if not p.requires_grad:
+                    continue
+                if not torch.equal(p.detach(), self._initial[name]):
+                    updated = True
+                    delta = (p.detach() - self._initial[name]).abs().max().item()
+                    print(
+                        f"[GradDebug] param {name} changed; max_abs_diff={delta:.6e}"
+                    )
+                    break
+            if not updated:
+                print("[GradDebug] trainable parameters did not change!")
+            return control
+
+    dataset = load_dataset("json", data_files=str(AUTO_QA_JL))["train"].rename_columns(
+        {"input": "prompt", "output": "response"}
     )
-    train_idx, eval_idx = train_test_split(
-        list(range(len(dataset))), test_size=0.1, random_state=42
+    split = dataset.train_test_split(test_size=0.1, seed=42)
+    train_set, eval_set = split["train"], split["test"]
+    print(
+        f"[Dataset] train_examples={len(train_set)} eval_examples={len(eval_set)}"
     )
-    train_set = dataset.select(train_idx)
-    eval_set = dataset.select(eval_idx)
+    first = train_set[0]
+    print(
+        f"[Dataset] sample prompt={first['prompt']!r} response={first['response']!r}"
+    )
+
+    def format_example(ex: dict) -> str:
+        return tok.apply_chat_template(
+            [
+                {"role": "user", "content": ex["prompt"].strip()},
+                {"role": "assistant", "content": ex["response"].strip()},
+            ],
+            tokenize=False,
+        )
     use_bf16 = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
     train_args = TrainingArguments(
         output_dir=str(CHECKPOINT_DIR),
@@ -113,19 +170,30 @@ def run_finetune() -> None:
         save_strategy="steps",
         fp16=False,
         bf16=use_bf16,
+        max_grad_norm=1.0,
         optim="paged_adamw_8bit" if torch.cuda.is_available() else "adamw_torch",
         report_to=[],
     )
     trainer = SFTTrainer(
         model=model,
+        tokenizer=tok,
         args=train_args,
         train_dataset=train_set,
         eval_dataset=eval_set,
+        formatting_func=format_example,
+        train_on_inputs=False,
         callbacks=[
             EarlyStoppingCallback(
                 early_stopping_patience=PATIENCE, early_stopping_threshold=0.0
-            )
+            ),
+            GradDebugCallback(model),
         ],
+    )
+    # sanity check that labels contain non-masked tokens
+    batch = next(iter(trainer.get_train_dataloader()))
+    non_masked = int((batch["labels"] != -100).sum())
+    print(
+        f"[SanityCheck] first batch total_tokens={batch['labels'].numel()} non_masked={non_masked}"
     )
     trainer.train()
     model.save_pretrained(CHECKPOINT_DIR)
