@@ -1,4 +1,4 @@
-"""LoRA fine-tuning helper."""
+"""LoRA fine‑tuning helper – fixed for latest `trl` (≥0.8.0)."""
 
 from __future__ import annotations
 
@@ -16,17 +16,20 @@ from transformers import (
     EarlyStoppingCallback,
     TrainingArguments,
 )
+
 try:  # transformers is stubbed in tests
     from transformers import TrainerCallback
-except Exception:  # pragma: no cover - fallback for minimal stubs
+except Exception:  # pragma: no cover – fallback for minimal stubs
     class TrainerCallback:  # type: ignore
         pass
 
-from trl import SFTTrainer
+from trl import SFTTrainer, SFTConfig  # NEW import
 
+# --------------------------------------------------------------------------- #
+# Constants
+# --------------------------------------------------------------------------- #
 BASE_MODEL = "mistralai/Mistral-7B-Instruct-v0.2"
-# dataset built by ``vgj_chat.data.dataset.build_auto_dataset``
-# automatically generated Q&A pairs
+# dataset built by ``vgj_chat.data.dataset.build_auto_dataset`` – Q&A pairs
 AUTO_QA_JL = Path("data/dataset/vgj_auto_dataset.jsonl")
 CHECKPOINT_DIR = Path("data/lora-vgj-checkpoint")
 MODEL_CACHE = Path("data/model_cache")
@@ -43,18 +46,27 @@ EPOCHS = 10
 LR = 2e-4
 
 
+# --------------------------------------------------------------------------- #
+# Fine‑tuning entry point
+# --------------------------------------------------------------------------- #
 def run_finetune() -> None:
     if CHECKPOINT_DIR.exists():
-        print(f"{CHECKPOINT_DIR} exists; skipping fine-tune")
+        print(f"{CHECKPOINT_DIR} exists; skipping fine‑tune")
         return
+
     hf_token = os.getenv("VGJ_HF_TOKEN")
     if hf_token:
         login(token=hf_token)
+
     CHECKPOINT_DIR.parent.mkdir(parents=True, exist_ok=True)
+
+    # ----------------------- tokenizer ------------------------------------ #
     tok = AutoTokenizer.from_pretrained(
         BASE_MODEL, use_fast=True, token=hf_token, cache_dir=MODEL_CACHE
     )
     tok.pad_token = tok.eos_token
+
+    # ----------------------- base model ----------------------------------- #
     if torch.cuda.is_available():
         bnb_cfg = BitsAndBytesConfig(
             load_in_4bit=True,
@@ -77,7 +89,10 @@ def run_finetune() -> None:
             token=hf_token,
             cache_dir=MODEL_CACHE,
         )
+
     base = prepare_model_for_kbit_training(base)
+
+    # ----------------------- LoRA adapter --------------------------------- #
     lora_cfg = LoraConfig(
         r=LORA_R,
         lora_alpha=LORA_ALPHA,
@@ -86,17 +101,15 @@ def run_finetune() -> None:
         task_type="CAUSAL_LM",
     )
     model = get_peft_model(base, lora_cfg)
-    # disable cache to avoid incompatibilities with gradient checkpointing
-    model.config.use_cache = False
-    # show which parameters will receive updates
+    model.config.use_cache = False  # avoid grad‑checkpoint/cache clash
     model.print_trainable_parameters()
 
+    # ----------------------- grad‑debug callback -------------------------- #
     class GradDebugCallback(TrainerCallback):
-        """Callback to print gradient norms and track parameter updates."""
+        """Print gradient norms each step and confirm params updated."""
 
         def __init__(self, model: torch.nn.Module) -> None:
             self.model = model
-            # snapshot of initial parameters to verify updates at the end
             self._initial = {
                 n: p.detach().clone()
                 for n, p in model.named_parameters()
@@ -104,44 +117,38 @@ def run_finetune() -> None:
             }
 
         def on_backward_end(self, args, state, control, **kwargs):
-            norms: dict[str, float] = {}
-            for name, p in self.model.named_parameters():
-                if p.requires_grad and p.grad is not None:
-                    norms[name] = float(p.grad.detach().norm())
-            total = sum(g ** 2 for g in norms.values()) ** 0.5
+            norms: dict[str, float] = {
+                n: float(p.grad.detach().norm())
+                for n, p in self.model.named_parameters()
+                if p.requires_grad and p.grad is not None
+            }
+            total = sum(g**2 for g in norms.values()) ** 0.5
             print(f"[GradDebug] step {state.global_step} grad_norm={total:.6f}")
-            # print a few individual layer norms to confirm non-zero grads
             for n, g in list(norms.items())[:3]:
                 print(f"[GradDebug]   {n} grad_norm={g:.6f}")
             return control
 
         def on_train_end(self, args, state, control, **kwargs):
-            updated = False
             for name, p in self.model.named_parameters():
-                if not p.requires_grad:
-                    continue
-                if not torch.equal(p.detach(), self._initial[name]):
-                    updated = True
+                if p.requires_grad and not torch.equal(p.detach(), self._initial[name]):
                     delta = (p.detach() - self._initial[name]).abs().max().item()
-                    print(
-                        f"[GradDebug] param {name} changed; max_abs_diff={delta:.6e}"
-                    )
+                    print(f"[GradDebug] param {name} changed; max_abs_diff={delta:.6e}")
                     break
-            if not updated:
+            else:
                 print("[GradDebug] trainable parameters did not change!")
             return control
 
+    # ----------------------- dataset -------------------------------------- #
     dataset = load_dataset("json", data_files=str(AUTO_QA_JL))["train"].rename_columns(
         {"input": "prompt", "output": "response"}
     )
     split = dataset.train_test_split(test_size=0.1, seed=42)
     train_set, eval_set = split["train"], split["test"]
-    print(
-        f"[Dataset] train_examples={len(train_set)} eval_examples={len(eval_set)}"
-    )
+
+    print(f"[Dataset] train_examples={len(train_set)}  eval_examples={len(eval_set)}")
     first = train_set[0]
     print(
-        f"[Dataset] sample prompt={first['prompt']!r} response={first['response']!r}"
+        f"[Dataset] sample prompt={first['prompt']!r}  response={first['response']!r}"
     )
 
     def format_example(ex: dict) -> str:
@@ -152,6 +159,8 @@ def run_finetune() -> None:
             ],
             tokenize=False,
         )
+
+    # ----------------------- training arguments --------------------------- #
     use_bf16 = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
     train_args = TrainingArguments(
         output_dir=str(CHECKPOINT_DIR),
@@ -174,14 +183,21 @@ def run_finetune() -> None:
         optim="paged_adamw_8bit" if torch.cuda.is_available() else "adamw_torch",
         report_to=[],
     )
+
+    # ----------------------- SFT config (key fix) ------------------------- #
+    sft_cfg = SFTConfig(
+        completion_only_loss=False,  # disable so formatter is allowed
+        dataset_text_field=None,     # let trainer use formatter output
+    )
+
+    # ----------------------- trainer -------------------------------------- #
     trainer = SFTTrainer(
         model=model,
-        tokenizer=tok,
         args=train_args,
         train_dataset=train_set,
         eval_dataset=eval_set,
         formatting_func=format_example,
-        train_on_inputs=False,
+        config=sft_cfg,              # NEW
         callbacks=[
             EarlyStoppingCallback(
                 early_stopping_patience=PATIENCE, early_stopping_threshold=0.0
@@ -189,13 +205,17 @@ def run_finetune() -> None:
             GradDebugCallback(model),
         ],
     )
-    # sanity check that labels contain non-masked tokens
+
+    # sanity check – non‑masked label tokens
     batch = next(iter(trainer.get_train_dataloader()))
     non_masked = int((batch["labels"] != -100).sum())
     print(
-        f"[SanityCheck] first batch total_tokens={batch['labels'].numel()} non_masked={non_masked}"
+        f"[SanityCheck] first batch total_tokens={batch['labels'].numel()} "
+        f"non_masked={non_masked}"
     )
+
+    # ----------------------- train & save --------------------------------- #
     trainer.train()
     model.save_pretrained(CHECKPOINT_DIR)
     tok.save_pretrained(CHECKPOINT_DIR)
-    print(f"LoRA adapter + tokenizer saved to → {CHECKPOINT_DIR}")
+    print(f"✅  LoRA adapter + tokenizer saved to → {CHECKPOINT_DIR}")
