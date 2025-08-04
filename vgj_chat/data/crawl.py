@@ -142,6 +142,8 @@ async def worker(
     while True:
         url = await q.get()
         q.task_done()
+        if stop_event is not None and stop_event.is_set():
+            break
         if url is None:
             break
         if url in seen:
@@ -229,9 +231,21 @@ async def crawl(seed: list[str], limit: int | None = None) -> None:
         ]
         if limit is None:
             await q.join()
+            for _ in tasks:
+                q.put_nowait(None)
+            await asyncio.gather(*tasks, return_exceptions=True)
+            bar.close()
         else:
             await stop_event.wait()
-        for _ in tasks:
-            q.put_nowait(None)
-        await asyncio.gather(*tasks, return_exceptions=True)
-        bar.close()
+            while not q.empty():
+                try:
+                    q.get_nowait()
+                    q.task_done()
+                except asyncio.QueueEmpty:
+                    break
+            for _ in tasks:
+                q.put_nowait(None)
+            for t in tasks:
+                t.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            bar.close()
