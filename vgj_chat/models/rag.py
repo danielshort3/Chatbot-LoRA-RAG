@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import threading
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Generator, List, Tuple
 
 import faiss  # type: ignore
@@ -29,6 +30,7 @@ from ..config import CFG
 from ..data.io import load_index, load_metadata
 
 logger = logging.getLogger(__name__)
+MODEL_CACHE = Path("data/model_cache")
 
 
 def _configure_logging() -> None:
@@ -72,8 +74,12 @@ def _boot() -> tuple[
         "Using device: %s (CUDA available: %s)", device, torch.cuda.is_available()
     )
     logger.info("Initialising embedding & re‑rank models …")
-    embedder = SentenceTransformer(CFG.embed_model, device=device)
-    reranker = CrossEncoder(CFG.rerank_model, device=device)
+    embedder = SentenceTransformer(
+        CFG.embed_model, device=device, cache_folder=str(MODEL_CACHE)
+    )
+    reranker = CrossEncoder(
+        CFG.rerank_model, device=device, cache_dir=MODEL_CACHE
+    )
 
     logger.info("Loading quantised model …")
     quant_cfg = BitsAndBytesConfig(
@@ -140,12 +146,15 @@ def _load_baseline_chat() -> pipeline:
         bnb_4bit_compute_dtype=torch.float16,
         bnb_4bit_use_double_quant=True,
     )
-    tok = AutoTokenizer.from_pretrained(CFG.base_model, use_fast=True)
+    tok = AutoTokenizer.from_pretrained(
+        CFG.base_model, use_fast=True, cache_dir=MODEL_CACHE
+    )
     model = AutoModelForCausalLM.from_pretrained(
         CFG.base_model,
         quantization_config=quant_cfg,
         device_map="auto",
         torch_dtype=torch.float16,
+        cache_dir=MODEL_CACHE,
     )
     return pipeline(
         "text-generation",

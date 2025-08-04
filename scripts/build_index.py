@@ -22,10 +22,16 @@ if __name__ == "__main__":
             nltk.data.find(f"tokenizers/{res}")
         except LookupError:
             nltk.download(res, quiet=True)
-    build_index(
-        Path("data/html_txt"),
-        Path("faiss.index"),
-        Path("meta.jsonl"),
-        "sentence-transformers/all-MiniLM-L6-v2",
-        max_docs=args.limit,
-    )
+    index_path = Path("data/faiss.index")
+    meta_path = Path("data/meta.jsonl")
+    if index_path.exists() and meta_path.exists():
+        print("FAISS index and metadata already exist; skipping build")
+    else:
+        index_path.parent.mkdir(parents=True, exist_ok=True)
+        build_index(
+            Path("data/html_txt"),
+            index_path,
+            meta_path,
+            "sentence-transformers/all-MiniLM-L6-v2",
+            max_docs=args.limit,
+        )

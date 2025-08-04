@@ -1,5 +1,6 @@
 import argparse
 import os
+from pathlib import Path
 
 import torch
 from peft import PeftModel
@@ -11,8 +12,9 @@ from transformers import (
 from huggingface_hub import login
 
 DEFAULT_BASE = "mistralai/Mistral-7B-Instruct-v0.2"
-DEFAULT_LORA = "lora-vgj-checkpoint"
-DEFAULT_OUT = "mistral-merged-4bit"
+DEFAULT_LORA = "data/lora-vgj-checkpoint"
+DEFAULT_OUT = "data/mistral-merged-4bit"
+MODEL_CACHE = Path("data/model_cache")
 
 
 def main() -> None:
@@ -26,6 +28,11 @@ def main() -> None:
     if token:
         login(token=token)
 
+    out_dir = Path(args.out_dir)
+    if out_dir.exists():
+        print(f"{out_dir} exists; skipping merge")
+        return
+
     qconfig = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_quant_type="nf4",
@@ -38,14 +45,17 @@ def main() -> None:
         torch_dtype=torch.float16,
         quantization_config=qconfig,
         token=token,
+        cache_dir=MODEL_CACHE,
     )
     lora = PeftModel.from_pretrained(base, args.lora_dir)
     merged = lora.merge_and_unload()
 
-    tok = AutoTokenizer.from_pretrained(args.base_model, use_fast=True, token=token)
-    merged.save_pretrained(args.out_dir)
-    tok.save_pretrained(args.out_dir)
-    print(f"Merged model saved to {args.out_dir}")
+    tok = AutoTokenizer.from_pretrained(
+        args.base_model, use_fast=True, token=token, cache_dir=MODEL_CACHE
+    )
+    merged.save_pretrained(out_dir)
+    tok.save_pretrained(out_dir)
+    print(f"Merged model saved to {out_dir}")
 
 
 if __name__ == "__main__":  # pragma: no cover

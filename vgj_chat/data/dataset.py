@@ -22,16 +22,19 @@ ANSWER_TOK_CAP = 220
 TXT_DIR = Path("data/html_txt")
 RAW_HTML_DIR = Path("data/raw_html")
 
-MANUAL_QA_JL = Path("vgj_lora_dataset.jsonl")
-AUTO_QA_JL = Path("vgj_auto_dataset.jsonl")
-COMBINED_QA_JL = Path("vgj_combined.jsonl")
+MANUAL_QA_JL = Path("data/vgj_lora_dataset.jsonl")
+AUTO_QA_JL = Path("data/vgj_auto_dataset.jsonl")
+COMBINED_QA_JL = Path("data/vgj_combined.jsonl")
+MODEL_CACHE = Path("data/model_cache")
 
 # authenticate for gated base model if token available
 HF_TOKEN = os.getenv("VGJ_HF_TOKEN")
 if HF_TOKEN:
     login(token=HF_TOKEN)
 
-tok = AutoTokenizer.from_pretrained(LLM_NAME, use_fast=True, token=HF_TOKEN)
+tok = AutoTokenizer.from_pretrained(
+    LLM_NAME, use_fast=True, token=HF_TOKEN, cache_dir=MODEL_CACHE
+)
 if torch.cuda.is_available():
     quant_cfg = BitsAndBytesConfig(
         load_in_4bit=True,
@@ -45,12 +48,14 @@ if torch.cuda.is_available():
         torch_dtype=torch.float16,
         device_map={"": 0},
         token=HF_TOKEN,
+        cache_dir=MODEL_CACHE,
     )
 else:
     llm = AutoModelForCausalLM.from_pretrained(
         LLM_NAME,
         torch_dtype=torch.float32,
         token=HF_TOKEN,
+        cache_dir=MODEL_CACHE,
     )
 
 
@@ -74,6 +79,10 @@ BOILER_PAT = re.compile(
 
 
 def build_auto_dataset() -> None:
+    if COMBINED_QA_JL.exists():
+        print(f"{COMBINED_QA_JL} exists; skipping dataset build")
+        return
+    COMBINED_QA_JL.parent.mkdir(parents=True, exist_ok=True)
     collapse = lambda s: re.sub(r"\s+", " ", s).strip()
     auto_examples = []
     skipped = 0
