@@ -24,39 +24,8 @@ RAW_HTML_DIR = Path("data/raw_html")
 AUTO_QA_JL = Path("data/dataset/vgj_auto_dataset.jsonl")
 MODEL_CACHE = Path("data/model_cache")
 
-# authenticate for gated base model if token available
-HF_TOKEN = os.getenv("VGJ_HF_TOKEN")
-if HF_TOKEN:
-    login(token=HF_TOKEN)
 
-tok = AutoTokenizer.from_pretrained(
-    LLM_NAME, use_fast=True, token=HF_TOKEN, cache_dir=MODEL_CACHE
-)
-if torch.cuda.is_available():
-    quant_cfg = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.float16,
-        bnb_4bit_use_double_quant=True,
-    )
-    llm = AutoModelForCausalLM.from_pretrained(
-        LLM_NAME,
-        quantization_config=quant_cfg,
-        torch_dtype=torch.float16,
-        device_map={"": 0},
-        token=HF_TOKEN,
-        cache_dir=MODEL_CACHE,
-    )
-else:
-    llm = AutoModelForCausalLM.from_pretrained(
-        LLM_NAME,
-        torch_dtype=torch.float32,
-        token=HF_TOKEN,
-        cache_dir=MODEL_CACHE,
-    )
-
-
-def gen_question(passage: str) -> str:
+def _gen_question(passage: str, tok: AutoTokenizer, llm: AutoModelForCausalLM) -> str:
     sys = (
         "You are a helpful travel assistant. Read the PASSAGE and invent one "
         "concise, natural-sounding traveler question that could be answered "
@@ -79,6 +48,37 @@ def build_auto_dataset() -> None:
     if AUTO_QA_JL.exists():
         print(f"{AUTO_QA_JL} exists; skipping dataset build")
         return
+
+    hf_token = os.getenv("VGJ_HF_TOKEN")
+    if hf_token:
+        login(token=hf_token)
+
+    tok = AutoTokenizer.from_pretrained(
+        LLM_NAME, use_fast=True, token=hf_token, cache_dir=MODEL_CACHE
+    )
+    if torch.cuda.is_available():
+        quant_cfg = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_use_double_quant=True,
+        )
+        llm = AutoModelForCausalLM.from_pretrained(
+            LLM_NAME,
+            quantization_config=quant_cfg,
+            torch_dtype=torch.float16,
+            device_map={"": 0},
+            token=hf_token,
+            cache_dir=MODEL_CACHE,
+        )
+    else:
+        llm = AutoModelForCausalLM.from_pretrained(
+            LLM_NAME,
+            torch_dtype=torch.float32,
+            token=hf_token,
+            cache_dir=MODEL_CACHE,
+        )
+
     AUTO_QA_JL.parent.mkdir(parents=True, exist_ok=True)
     auto_examples = []
     skipped = 0
@@ -89,7 +89,7 @@ def build_auto_dataset() -> None:
         if not paras:
             continue
         passage = "\n\n".join(paras)
-        question = gen_question(passage)
+        question = _gen_question(passage, tok, llm)
         words, answer_words = 0, []
         for p in paras:
             if words + len(p.split()) > ANSWER_TOK_CAP:
