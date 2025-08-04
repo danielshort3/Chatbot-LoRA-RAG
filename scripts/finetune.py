@@ -238,9 +238,7 @@ def main() -> None:
     if max_pos and max_pos > 0:
         tokenizer.model_max_length = min(tokenizer.model_max_length, max_pos)
 
-    base = prepare_model_for_kbit_training(
-        base, gradient_checkpointing_kwargs={"use_reentrant": False}
-    )
+    base = prepare_model_for_kbit_training(base)
     lora_cfg = LoraConfig(
         r=args.lora_r,
         lora_alpha=args.lora_alpha,
@@ -294,7 +292,6 @@ def main() -> None:
         train_dataset=datasets["train"],
         eval_dataset=datasets["test"],
         data_collator=data_collator,
-        label_names=["labels"],
         callbacks=[
             DiagnosticsCallback(model),
             EarlyStoppingCallback(early_stopping_patience=args.patience),
