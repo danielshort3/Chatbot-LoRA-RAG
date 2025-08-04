@@ -60,10 +60,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--lora-dropout", type=float, default=0.05)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
-        "--patience", type=int, default=3, help="Early stopping patience"
+        "--patience", type=int, default=8, help="Early stopping patience"
     )
     parser.add_argument(
-        "--lr-patience", type=int, default=1, help="Patience before reducing LR"
+        "--lr-patience", type=int, default=4, help="Patience before reducing LR"
     )
     parser.add_argument(
         "--lr-decay-factor", type=float, default=0.5, help="LR reduction factor"
