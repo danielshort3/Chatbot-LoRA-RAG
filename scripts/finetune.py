@@ -8,10 +8,10 @@ from __future__ import annotations
 import argparse
 import math
 import os
+import random
 from pathlib import Path
 from typing import Dict, Iterable
 
-import random
 import numpy as np
 import torch
 import yaml
@@ -23,6 +23,7 @@ from transformers import (
     AutoTokenizer,
     BitsAndBytesConfig,
     DataCollatorForLanguageModeling,
+    EarlyStoppingCallback,
     Trainer,
     TrainerCallback,
     TrainingArguments,
@@ -36,10 +37,15 @@ MODEL_CACHE = Path("data/model_cache")
 # Argument parsing and configuration
 # ---------------------------------------------------------------------------
 
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="LoRA fine-tuning script")
-    parser.add_argument("--data", type=str, required=True, help="JSONL file with Q&A pairs")
-    parser.add_argument("--model-name", type=str, default="mistralai/Mistral-7B-Instruct-v0.2")
+    parser.add_argument(
+        "--data", type=str, required=True, help="JSONL file with Q&A pairs"
+    )
+    parser.add_argument(
+        "--model-name", type=str, default="mistralai/Mistral-7B-Instruct-v0.2"
+    )
     parser.add_argument("--output-dir", type=str, default="data/lora-vgj-checkpoint")
     parser.add_argument("--prompt-field", type=str, default="input")
     parser.add_argument("--response-field", type=str, default="output")
@@ -53,6 +59,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--lora-alpha", type=int, default=32)
     parser.add_argument("--lora-dropout", type=float, default=0.05)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--patience", type=int, default=3, help="Early stopping patience"
+    )
+    parser.add_argument(
+        "--lr-patience", type=int, default=1, help="Patience before reducing LR"
+    )
+    parser.add_argument(
+        "--lr-decay-factor", type=float, default=0.5, help="LR reduction factor"
+    )
     parser.add_argument("--config", type=str, help="Optional YAML config file")
     args = parser.parse_args()
 
@@ -61,9 +76,9 @@ def parse_args() -> argparse.Namespace:
         with open(args.config) as f:
             cfg = yaml.safe_load(f)
         for key, value in cfg.items():
-            if not hasattr(args, key.replace('-', '_')):
+            if not hasattr(args, key.replace("-", "_")):
                 raise ValueError(f"Unknown config key: {key}")
-            dest = key.replace('-', '_')
+            dest = key.replace("-", "_")
             if getattr(args, dest) == parser.get_default(dest):
                 setattr(args, dest, value)
     return args
@@ -73,13 +88,14 @@ def parse_args() -> argparse.Namespace:
 # Data handling
 # ---------------------------------------------------------------------------
 
+
 def load_and_tokenize(
     data_path: str,
     tokenizer: AutoTokenizer,
     prompt_field: str,
     response_field: str,
     seed: int,
-) -> Dict[str, 'datasets.Dataset']:
+) -> Dict[str, "datasets.Dataset"]:
     if not Path(data_path).exists():
         raise FileNotFoundError(data_path)
     ds = load_dataset("json", data_files=data_path)["train"]
@@ -115,13 +131,16 @@ def load_and_tokenize(
 
     ds = ds.shuffle(seed=seed)
     split = ds.train_test_split(test_size=0.1, seed=seed)
-    tokenized = {k: v.map(_tokenize, remove_columns=v.column_names) for k, v in split.items()}
+    tokenized = {
+        k: v.map(_tokenize, remove_columns=v.column_names) for k, v in split.items()
+    }
     return tokenized
 
 
 # ---------------------------------------------------------------------------
 # Diagnostics callback
 # ---------------------------------------------------------------------------
+
 
 class DiagnosticsCallback(TrainerCallback):
     """Report losses, gradient norms, GPU memory and LR schedule."""
@@ -138,7 +157,9 @@ class DiagnosticsCallback(TrainerCallback):
             print(f"[step {step}] train_loss={logs['loss']:.4f} ppl={ppl:.2f}")
         if "eval_loss" in logs:
             eval_ppl = math.exp(logs["eval_loss"])
-            print(f"[step {step}] val_loss={logs['eval_loss']:.4f} val_ppl={eval_ppl:.2f}")
+            print(
+                f"[step {step}] val_loss={logs['eval_loss']:.4f} val_ppl={eval_ppl:.2f}"
+            )
         if "learning_rate" in logs:
             print(f"[step {step}] lr={logs['learning_rate']:.6e}")
         if torch.cuda.is_available():
@@ -157,7 +178,7 @@ class DiagnosticsCallback(TrainerCallback):
                     continue
                 norms.append(p.grad.detach().norm().item())
         if norms:
-            total = math.sqrt(sum(n ** 2 for n in norms))
+            total = math.sqrt(sum(n**2 for n in norms))
             print(f"[step {state.global_step}] lora_grad_norm={total:.6f}")
         if zero_grad:
             print(
@@ -168,6 +189,7 @@ class DiagnosticsCallback(TrainerCallback):
 # ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
+
 
 def main() -> None:
     args = parse_args()
@@ -251,6 +273,14 @@ def main() -> None:
         eval_strategy="steps",
         save_strategy="steps",
         save_total_limit=1,
+        load_best_model_at_end=True,
+        metric_for_best_model="eval_loss",
+        greater_is_better=False,
+        lr_scheduler_type="reduce_lr_on_plateau",
+        lr_scheduler_kwargs={
+            "patience": args.lr_patience,
+            "factor": args.lr_decay_factor,
+        },
         seed=args.seed,
         bf16=torch.cuda.is_available() and torch.cuda.is_bf16_supported(),
         report_to=[],
@@ -262,10 +292,14 @@ def main() -> None:
         train_dataset=datasets["train"],
         eval_dataset=datasets["test"],
         data_collator=data_collator,
-        callbacks=[DiagnosticsCallback(model)],
+        callbacks=[
+            DiagnosticsCallback(model),
+            EarlyStoppingCallback(early_stopping_patience=args.patience),
+        ],
     )
 
     trainer.train()
+    model = trainer.model
     model.save_pretrained(args.output_dir)
     tokenizer.save_pretrained(args.output_dir)
     print(f"✅  LoRA adapter saved to {args.output_dir}")
