@@ -9,9 +9,11 @@ from pathlib import Path
 
 import torch
 import trafilatura
-from huggingface_hub import login
+from datasets import load_dataset
+from sentence_transformers import SentenceTransformer
 from tqdm.auto import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from huggingface_hub import login
 
 LLM_NAME = "mistralai/Mistral-7B-Instruct-v0.2"
 PARA_MAX = 3
@@ -20,7 +22,9 @@ ANSWER_TOK_CAP = 220
 TXT_DIR = Path("data/html_txt")
 RAW_HTML_DIR = Path("data/raw_html")
 
-AUTO_QA_JL = Path("vgj_auto_dataset.jsonl")
+MANUAL_QA_JL = Path("data/vgj_lora_dataset.jsonl")
+AUTO_QA_JL = Path("data/vgj_auto_dataset.jsonl")
+COMBINED_QA_JL = Path("data/vgj_combined.jsonl")
 MODEL_CACHE = Path("data/model_cache")
 
 # authenticate for gated base model if token available
@@ -75,13 +79,15 @@ BOILER_PAT = re.compile(
 
 
 def build_auto_dataset() -> None:
-    if AUTO_QA_JL.exists():
-        print(f"{AUTO_QA_JL} exists; skipping dataset build")
+    if COMBINED_QA_JL.exists():
+        print(f"{COMBINED_QA_JL} exists; skipping dataset build")
         return
-    AUTO_QA_JL.parent.mkdir(parents=True, exist_ok=True)
+    COMBINED_QA_JL.parent.mkdir(parents=True, exist_ok=True)
+    collapse = lambda s: re.sub(r"\s+", " ", s).strip()
     auto_examples = []
     skipped = 0
     for txt_f in tqdm(sorted(TXT_DIR.glob("*.txt")), desc="auto-QA", unit="page"):
+        url = txt_f.with_suffix(".url").read_text().strip()
         html = (RAW_HTML_DIR / f"{txt_f.stem}.html").read_text()
         text = trafilatura.extract(html) or ""
         paras = [p.strip() for p in text.splitlines() if len(p.split()) > 25][:PARA_MAX]
@@ -99,10 +105,11 @@ def build_auto_dataset() -> None:
         if BOILER_PAT.search(answer):
             skipped += 1
             continue
-        auto_examples.append(
-            {"instruction": question, "input": passage, "output": answer}
-        )
+        auto_examples.append({"instruction": question, "input": "", "output": answer})
     with AUTO_QA_JL.open("w") as f:
         for ex in auto_examples:
             f.write(json.dumps(ex) + "\n")
-    print(f"Generated {len(auto_examples):,} clean pairs → {AUTO_QA_JL}")
+    with COMBINED_QA_JL.open("w") as out:
+        for src in (MANUAL_QA_JL, AUTO_QA_JL):
+            if src.exists():
+                out.writelines(src.open())
