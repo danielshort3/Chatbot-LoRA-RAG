@@ -38,6 +38,7 @@ def test_modules_import_from_wheel(tmp_path):
 
     trl_mod = ModuleType("trl")
     trl_mod.SFTTrainer = object
+    trl_mod.SFTConfig = object
     sys.modules.setdefault("trl", trl_mod)
 
     wheel_dir = tmp_path / "wheel"

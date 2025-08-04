@@ -4,6 +4,7 @@ import tarfile
 from pathlib import Path
 
 CRAWL_TXT_DIR = Path("data/html_txt")
+AUTO_QA_JL = Path("data/dataset/vgj_auto_dataset.jsonl")
 
 
 def main() -> None:
@@ -42,7 +43,7 @@ def main() -> None:
         [
             ["python", "scripts/build_index.py"],
             ["python", "scripts/build_dataset.py"],
-            ["python", "scripts/finetune.py"],
+            ["python", "scripts/finetune.py", "--data", str(AUTO_QA_JL)],
             ["python", "scripts/merge_lora.py"],
         ]
     )
