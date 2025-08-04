@@ -95,6 +95,7 @@ def run_finetune() -> None:
     )
     train_set = dataset.select(train_idx)
     eval_set = dataset.select(eval_idx)
+    use_bf16 = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
     train_args = TrainingArguments(
         output_dir=str(CHECKPOINT_DIR),
         per_device_train_batch_size=BATCH_PER_GPU,
@@ -110,7 +111,9 @@ def run_finetune() -> None:
         metric_for_best_model="eval_loss",
         greater_is_better=False,
         save_strategy="steps",
-        fp16=True,
+        fp16=False,
+        bf16=use_bf16,
+        optim="paged_adamw_8bit" if torch.cuda.is_available() else "adamw_torch",
         report_to=[],
     )
     trainer = SFTTrainer(
