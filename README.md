@@ -60,6 +60,14 @@ Scripts overview:
 4. `finetune.py` – train the LoRA adapter
 5. `merge_lora.py` – merge the adapter into a 4‑bit model
 
+Run the standalone trainer on a JSONL Q&A file to produce a LoRA checkpoint:
+
+```bash
+python scripts/finetune.py --data data/qa.jsonl --output-dir data/lora
+```
+
+Pass `--config config.yaml` to load hyper‑parameters from a YAML file.
+
 The pipeline builds the FAISS index on the CPU so no special GPU support is
 required. All other stages—including auto‑generated Q&A creation, LoRA
 fine‑tuning and inference—will use CUDA when available.
