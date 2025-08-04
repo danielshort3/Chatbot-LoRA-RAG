@@ -110,7 +110,8 @@ def run_finetune() -> None:
         metric_for_best_model="eval_loss",
         greater_is_better=False,
         save_strategy="steps",
-        fp16=True,
+        fp16=torch.cuda.is_available(),
+        optim="paged_adamw_8bit" if torch.cuda.is_available() else "adamw_torch",
         report_to=[],
     )
     trainer = SFTTrainer(
