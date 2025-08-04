@@ -3,14 +3,7 @@ import subprocess
 import tarfile
 from pathlib import Path
 
-STEPS = [
-    ["python", "scripts/crawl.py"],
-    ["python", "scripts/build_index.py"],
-    ["python", "scripts/build_dataset.py"],
-    ["python", "scripts/finetune.py"],
-    ["python", "scripts/merge_lora.py"],
-    ["python", "-m", "vgj_chat", "--compare"],
-]
+CRAWL_TXT_DIR = Path("data/html_txt")
 
 
 def main() -> None:
@@ -37,11 +30,24 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    steps = STEPS.copy()
-    if args.limit is not None:
-        steps[0] = ["python", "scripts/crawl.py", "--limit", str(args.limit)]
-    if not args.launch_chatbot:
-        steps.pop()
+    steps: list[list[str]] = []
+    if args.limit is None and any(CRAWL_TXT_DIR.glob("*.txt")):
+        print(f"{CRAWL_TXT_DIR} populated; skipping crawl step")
+    else:
+        crawl_cmd = ["python", "scripts/crawl.py"]
+        if args.limit is not None:
+            crawl_cmd.extend(["--limit", str(args.limit)])
+        steps.append(crawl_cmd)
+    steps.extend(
+        [
+            ["python", "scripts/build_index.py"],
+            ["python", "scripts/build_dataset.py"],
+            ["python", "scripts/finetune.py"],
+            ["python", "scripts/merge_lora.py"],
+        ]
+    )
+    if args.launch_chatbot:
+        steps.append(["python", "-m", "vgj_chat", "--compare"])
 
     for cmd in steps:
         subprocess.run(cmd, check=True)

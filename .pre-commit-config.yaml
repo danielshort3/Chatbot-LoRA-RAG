@@ -12,8 +12,11 @@ repos:
     rev: v0.1.11
     hooks:
       - id: ruff
-  - repo: https://github.com/pytest-dev/pytest
-    rev: 7.4.2
+  - repo: local
     hooks:
       - id: pytest
+        name: pytest
+        entry: pytest
+        language: system
+        types: [python]
         stages: [manual]
