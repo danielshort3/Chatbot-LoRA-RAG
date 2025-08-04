@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import os
+from pathlib import Path
 
 import torch
 from datasets import load_dataset
+from huggingface_hub import login
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from sklearn.model_selection import train_test_split
 from transformers import (
@@ -17,12 +18,11 @@ from transformers import (
     TrainingArguments,
 )
 from trl import SFTTrainer
-from huggingface_hub import login
 
 BASE_MODEL = "mistralai/Mistral-7B-Instruct-v0.2"
 # dataset built by ``vgj_chat.data.dataset.build_auto_dataset``
-# combines manual and automatically generated Q&A pairs
-COMBINED_QA_JL = Path("data/vgj_combined.jsonl")
+# automatically generated Q&A pairs
+AUTO_QA_JL = Path("vgj_auto_dataset.jsonl")
 CHECKPOINT_DIR = Path("data/lora-vgj-checkpoint")
 MODEL_CACHE = Path("data/model_cache")
 
@@ -88,7 +88,7 @@ def run_finetune() -> None:
             user += "\n" + ex["input"].strip()
         return {"text": f"<s>[INST] {user} [/INST] {ex['output'].strip()} </s>"}
 
-    dataset = load_dataset("json", data_files=str(COMBINED_QA_JL), split="train").map(
+    dataset = load_dataset("json", data_files=str(AUTO_QA_JL), split="train").map(
         to_chat, remove_columns=["instruction", "input", "output"]
     )
     train_idx, eval_idx = train_test_split(
