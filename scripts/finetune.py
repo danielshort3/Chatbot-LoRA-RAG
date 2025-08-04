@@ -247,7 +247,7 @@ def main() -> None:
         learning_rate=args.learning_rate,
         logging_steps=args.logging_steps,
         eval_steps=args.eval_steps,
-        evaluation_strategy="steps",
+        eval_strategy="steps",
         save_strategy="steps",
         save_total_limit=1,
         seed=args.seed,
