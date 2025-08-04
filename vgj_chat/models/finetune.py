@@ -29,8 +29,9 @@ LORA_ALPHA = 32
 LORA_DROPOUT = 0.05
 BATCH_PER_GPU = 4
 GRAD_ACC_STEPS = 4
-LOG_STEPS = 1
-EVAL_STEPS = 1
+LOG_STEPS = 10
+# evaluate and save once per epoch to avoid early stopping after only a few
+# optimisation steps
 PATIENCE = 3
 EPOCHS = 10
 LR = 2e-4
@@ -79,6 +80,7 @@ def run_finetune() -> None:
     model.gradient_checkpointing_enable(
         gradient_checkpointing_kwargs={"use_reentrant": False}
     )
+    model.enable_input_require_grads()
 
     def to_chat(ex):
         user = ex["instruction"].strip()
@@ -104,12 +106,11 @@ def run_finetune() -> None:
         lr_scheduler_type="cosine",
         warmup_ratio=0.03,
         logging_steps=LOG_STEPS,
-        eval_strategy="steps",
-        eval_steps=EVAL_STEPS,
+        eval_strategy="epoch",
+        save_strategy="epoch",
         load_best_model_at_end=True,
         metric_for_best_model="eval_loss",
         greater_is_better=False,
-        save_strategy="steps",
         fp16=False,
         bf16=bf16,
         report_to=[],
@@ -120,6 +121,7 @@ def run_finetune() -> None:
         args=train_args,
         train_dataset=train_set,
         eval_dataset=eval_set,
+        tokenizer=tok,
         callbacks=[
             EarlyStoppingCallback(
                 early_stopping_patience=PATIENCE, early_stopping_threshold=0.0
