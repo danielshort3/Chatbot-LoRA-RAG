@@ -43,23 +43,27 @@ def run_finetune() -> None:
     tok = AutoTokenizer.from_pretrained(BASE_MODEL, use_fast=True, token=hf_token)
     tok.pad_token = tok.eos_token
     if torch.cuda.is_available():
+        compute_dtype = (
+            torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+        )
         bnb_cfg = BitsAndBytesConfig(
             load_in_4bit=True,
             bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_compute_dtype=compute_dtype,
             bnb_4bit_use_double_quant=True,
         )
         base = AutoModelForCausalLM.from_pretrained(
             BASE_MODEL,
             quantization_config=bnb_cfg,
             device_map={"": 0},
-            torch_dtype=torch.float16,
+            torch_dtype=compute_dtype,
             token=hf_token,
         )
     else:
+        compute_dtype = torch.float32
         base = AutoModelForCausalLM.from_pretrained(
             BASE_MODEL,
-            torch_dtype=torch.float32,
+            torch_dtype=compute_dtype,
             token=hf_token,
         )
     base = prepare_model_for_kbit_training(base)
@@ -90,6 +94,7 @@ def run_finetune() -> None:
     )
     train_set = dataset.select(train_idx)
     eval_set = dataset.select(eval_idx)
+    bf16 = torch.cuda.is_available() and compute_dtype == torch.bfloat16
     train_args = TrainingArguments(
         output_dir=CHECKPOINT_DIR,
         per_device_train_batch_size=BATCH_PER_GPU,
@@ -105,7 +110,8 @@ def run_finetune() -> None:
         metric_for_best_model="eval_loss",
         greater_is_better=False,
         save_strategy="steps",
-        fp16=torch.cuda.is_available(),
+        fp16=False,
+        bf16=bf16,
         report_to=[],
         label_names=["labels"],
     )
