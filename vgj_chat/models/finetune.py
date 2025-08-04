@@ -105,9 +105,8 @@ def run_finetune() -> None:
         metric_for_best_model="eval_loss",
         greater_is_better=False,
         save_strategy="steps",
-        fp16=torch.cuda.is_available(),
+        fp16=True,
         report_to=[],
-        label_names=["labels"],
     )
     trainer = SFTTrainer(
         model=model,
@@ -119,6 +118,7 @@ def run_finetune() -> None:
                 early_stopping_patience=PATIENCE, early_stopping_threshold=0.0
             )
         ],
+        label_names=[],
     )
     trainer.train()
     model.save_pretrained(CHECKPOINT_DIR)
