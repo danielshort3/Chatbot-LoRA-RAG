@@ -1,22 +1,25 @@
-FROM pytorch/pytorch:2.7.1-cuda12.8-cudnn9-devel
+FROM pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime
 
 WORKDIR /app
-
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends git build-essential && \
+    apt-get install -y --no-install-recommends libgomp1 && \
     rm -rf /var/lib/apt/lists/*
 
-# install dependencies including bitsandbytes
-COPY requirements.sagemaker.txt ./requirements.txt
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+COPY requirements.sagemaker.txt .
+RUN pip install --no-cache-dir --upgrade pip \
+ && pip install --no-cache-dir -r requirements.sagemaker.txt \
+ && rm requirements.sagemaker.txt
 
-COPY . .
+COPY pyproject.toml README.md ./
+COPY vgj_chat ./vgj_chat
+COPY serve.py .
+
 RUN pip install --no-cache-dir .
 
-ENV VGJ_INDEX_PATH=/opt/ml/model/faiss.index
-ENV VGJ_META_PATH=/opt/ml/model/meta.jsonl
-ENV VGJ_MERGED_MODEL_DIR=/opt/ml/model/mistral-merged-4bit
+ENV VGJ_INDEX_PATH=/opt/ml/model/faiss.index \
+    VGJ_META_PATH=/opt/ml/model/meta.jsonl \
+    VGJ_MERGED_MODEL_DIR=/opt/ml/model/mistral-merged-4bit
 
-EXPOSE 7860
-CMD ["python", "-m", "vgj_chat"]
+EXPOSE 8080
+ENTRYPOINT ["python", "serve.py"]
+CMD []

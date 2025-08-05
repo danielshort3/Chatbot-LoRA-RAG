@@ -17,4 +17,5 @@ RUN pip install --no-cache-dir .
 
 ################  Expose port & launch  ########################
 EXPOSE 8080
-CMD ["python", "serve.py"]
+ENTRYPOINT ["python", "serve.py"]
+CMD []
