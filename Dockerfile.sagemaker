@@ -2,8 +2,14 @@ FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
 
 WORKDIR /app
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends libgomp1 && \
+    apt-get install -y --no-install-recommends \
+        build-essential \
+        libgomp1 && \
     rm -rf /var/lib/apt/lists/*
+
+ENV CC=/usr/bin/gcc \
+    CXX=/usr/bin/g++
+
 
 COPY requirements.sagemaker.txt .
 RUN pip install --no-cache-dir --upgrade pip \

@@ -1,9 +1,10 @@
 fastapi==0.111.0
 uvicorn[standard]==0.29.0
-transformers==4.42.1
-accelerate==0.30.1
-sentencepiece
-faiss-cpu
-bitsandbytes
-sentence-transformers
-sagemaker-inference
+transformers==4.53.3
+accelerate>=0.27.0,<0.31
+sentencepiece>=0.1.99
+faiss-cpu==1.8.0
+bitsandbytes==0.45.2
+triton==2.1.0
+sentence-transformers==2.7.0
+sagemaker-inference==1.10.1
