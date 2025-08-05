@@ -1,11 +1,12 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
-import uvicorn
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
-import faiss
 import json
 import pathlib
+
+import faiss
+import torch
+import uvicorn
+from fastapi import FastAPI
+from pydantic import BaseModel
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 MODEL_DIR = pathlib.Path("/opt/ml/model")
 TOKENIZER = AutoTokenizer.from_pretrained(MODEL_DIR)
@@ -13,7 +14,7 @@ MODEL = AutoModelForCausalLM.from_pretrained(
     MODEL_DIR, torch_dtype="auto", device_map="auto"
 )
 INDEX = faiss.read_index(str(MODEL_DIR / "faiss.index"))
-METADATA = [json.loads(l) for l in open(MODEL_DIR / "meta.jsonl")]
+METADATA = [json.loads(line) for line in open(MODEL_DIR / "meta.jsonl")]
 
 app = FastAPI()
 
@@ -29,9 +30,9 @@ def ping():
 
 @app.post("/invocations")
 def invoke(p: Prompt):
-    query_emb = MODEL.get_input_embeddings()(
-        torch.tensor(TOKENIZER.encode(p.inputs))
-    ).mean(0).detach().cpu().numpy()
+    with torch.no_grad():
+        ids = torch.tensor(TOKENIZER.encode(p.inputs), device=MODEL.device)
+        query_emb = MODEL.get_input_embeddings()(ids).mean(0).cpu().numpy()
     _, ids = INDEX.search(query_emb.reshape(1, -1), 5)
     context = " ".join(METADATA[i]["text"] for i in ids[0])
     prompt = (
@@ -46,9 +47,9 @@ def invoke(p: Prompt):
         **TOKENIZER(prompt, return_tensors="pt").to(MODEL.device),
         max_new_tokens=200,
     )
-    answer = (
-        TOKENIZER.decode(output[0], skip_special_tokens=True).split("Assistant:")[-1]
-    )
+    answer = TOKENIZER.decode(output[0], skip_special_tokens=True).split("Assistant:")[
+        -1
+    ]
     return {"generated_text": answer}
 
 
