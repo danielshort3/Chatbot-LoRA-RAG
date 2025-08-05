@@ -67,7 +67,6 @@ def invoke(p: Prompt):
         .split("Assistant:")[-1]
         .strip()
     )
-    answer += "\n\nSources: " + ", ".join(sources)
     return {"generated_text": answer, "sources": sources}
 
 
