@@ -28,10 +28,10 @@ class Config:
     # RAG settings
     top_k: int = 5
     score_min: float = 0.0
-    max_new_tokens: int = 512
+    max_new_tokens: int = 2048
 
     # similarity guard-rail
-    sim_threshold: float = 0.80
+    sim_threshold: float = 0.50
 
     # misc
     cuda: bool = torch.cuda.is_available()
