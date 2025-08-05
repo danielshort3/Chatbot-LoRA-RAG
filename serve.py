@@ -7,6 +7,7 @@ import uvicorn
 from fastapi import FastAPI
 from pydantic import BaseModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from sentence_transformers import SentenceTransformer
 
 MODEL_DIR = pathlib.Path("/opt/ml/model")
 TOKENIZER = AutoTokenizer.from_pretrained(MODEL_DIR)
@@ -14,6 +15,10 @@ MODEL = AutoModelForCausalLM.from_pretrained(
     MODEL_DIR, torch_dtype="auto", device_map="auto"
 )
 INDEX = faiss.read_index(str(MODEL_DIR / "faiss.index"))
+EMBEDDER = SentenceTransformer(
+    "sentence-transformers/all-MiniLM-L6-v2",
+    device="cuda" if torch.cuda.is_available() else "cpu",
+)
 METADATA = [json.loads(line) for line in open(MODEL_DIR / "meta.jsonl")]
 
 app = FastAPI()
@@ -30,9 +35,11 @@ def ping():
 
 @app.post("/invocations")
 def invoke(p: Prompt):
-    with torch.no_grad():
-        ids = torch.tensor(TOKENIZER.encode(p.inputs), device=MODEL.device)
-        query_emb = MODEL.get_input_embeddings()(ids).mean(0).cpu().numpy()
+    query_emb = EMBEDDER.encode(p.inputs, normalize_embeddings=True)
+    if query_emb.shape[0] != INDEX.d:
+        raise ValueError(
+            f"Embedding dimension {query_emb.shape[0]} does not match index dimension {INDEX.d}"
+        )
     _, ids = INDEX.search(query_emb.reshape(1, -1), 5)
     context = " ".join(METADATA[i]["text"] for i in ids[0])
     prompt = (
