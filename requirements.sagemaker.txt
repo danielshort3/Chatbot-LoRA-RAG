@@ -5,3 +5,4 @@ accelerate==0.30.1
 sentencepiece
 faiss-cpu
 bitsandbytes
+sentence-transformers
