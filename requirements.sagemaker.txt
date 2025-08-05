@@ -6,3 +6,4 @@ sentencepiece
 faiss-cpu
 bitsandbytes
 sentence-transformers
+sagemaker-inference
