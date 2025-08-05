@@ -6,6 +6,7 @@ import faiss
 import torch
 from sagemaker_inference import model_server
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from vgj_chat.config import CFG
 
 
 def model_fn(model_dir: str) -> Dict[str, Any]:
@@ -43,7 +44,7 @@ def predict_fn(data, ctx):
 
     aug_prompt = f"{retrieved}\n\n### Question:\n{prompt}\n### Answer:"
     input_ids = mdl["tok"](aug_prompt, return_tensors="pt").to("cuda")
-    gen_ids = mdl["lm"].generate(**input_ids, max_new_tokens=256)
+    gen_ids = mdl["lm"].generate(**input_ids, max_new_tokens=CFG.max_new_tokens)
     answer = mdl["tok"].decode(gen_ids[0], skip_special_tokens=True)
     return {"generated_text": answer}
 

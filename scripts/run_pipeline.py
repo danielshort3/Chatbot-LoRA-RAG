@@ -6,12 +6,13 @@ from pathlib import Path
 
 CRAWL_TXT_DIR = Path("data/html_txt")
 AUTO_QA_JL = Path("data/dataset/vgj_auto_dataset.jsonl")
+LORA_DIR = Path("data/lora-vgj-checkpoint")
 
 # ──────────────────────────────────────────────────────────
 # NEW CONSTANTS
 MERGED_SRC  = Path("data/mistral-merged-4bit")
 DEST_DIR    = Path("model")          # or Path("models") if you prefer
-ARCHIVE     = Path("models.tar.gz")  # will live in project root
+ARCHIVE     = Path("model.tar.gz")  # will live in project root
 # ──────────────────────────────────────────────────────────
 
 
@@ -26,10 +27,15 @@ def main() -> None:
             return False
         raise argparse.ArgumentTypeError("boolean value expected")
 
-    parser.add_argument("--limit", type=int, default=None,
-                        help="Limit number of pages to crawl")
-    parser.add_argument("--launch-chatbot", type=str2bool,
-                        default=True, help="Launch the chat UI after finishing the pipeline (true/false)")
+    parser.add_argument(
+        "--limit", type=int, default=None, help="Limit number of pages to crawl"
+    )
+    parser.add_argument(
+        "--launch-chatbot",
+        type=str2bool,
+        default=True,
+        help="Launch the chat UI after finishing the pipeline (true/false)",
+    )
     args = parser.parse_args()
 
     steps: list[list[str]] = []
@@ -41,12 +47,23 @@ def main() -> None:
             crawl_cmd.extend(["--limit", str(args.limit)])
         steps.append(crawl_cmd)
 
-    steps.extend([
-        ["python", "scripts/build_index.py"],
-        ["python", "scripts/build_dataset.py"],
-        ["python", "scripts/finetune.py", "--data", str(AUTO_QA_JL)],
-        ["python", "scripts/merge_lora.py"],
-    ])
+    steps.extend(
+        [
+            ["python", "scripts/build_index.py"],
+            ["python", "scripts/build_dataset.py"],
+        ]
+    )
+
+    if (LORA_DIR / "adapter_model.safetensors").exists():
+        print(f"{LORA_DIR} exists; skipping fine-tune step")
+    else:
+        steps.append(["python", "scripts/finetune.py", "--data", str(AUTO_QA_JL)])
+
+    if (MERGED_SRC / "model.safetensors").exists():
+        print(f"{MERGED_SRC} exists; skipping merge step")
+    else:
+        steps.append(["python", "scripts/merge_lora.py"])
+
     if args.launch_chatbot:
         steps.append(["python", "-m", "vgj_chat", "--compare"])
 
@@ -70,7 +87,7 @@ def main() -> None:
     shutil.copy2("data/faiss.index", DEST_DIR / "faiss.index")
     shutil.copy2("data/meta.jsonl",  DEST_DIR / "meta.jsonl")
 
-    # 4. Tar up *contents* (not parent dir) into models.tar.gz
+    # 4. Tar up *contents* (not parent dir) into model.tar.gz
     with tarfile.open(ARCHIVE, "w:gz") as tar:
         for file_path in DEST_DIR.iterdir():
             tar.add(file_path, arcname=file_path.name)

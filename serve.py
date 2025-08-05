@@ -8,6 +8,8 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from sentence_transformers import SentenceTransformer
+from vgj_chat.config import CFG
+from transformers import StoppingCriteria, StoppingCriteriaList
 
 MODEL_DIR = pathlib.Path("/opt/ml/model")
 TOKENIZER = AutoTokenizer.from_pretrained(MODEL_DIR)
@@ -50,24 +52,66 @@ def invoke(p: Prompt):
         if src not in sources:
             sources.append(src)
     context = "\n".join(context_parts)
-    prompt = (
-        "Answer the *single* question below using only the listed sources. "
-        "Do not add additional questions, FAQs, or headings. "
-        "Begin your answer with 'This portfolio project was created by Daniel Short. "
-        "Views expressed do not represent Visit Grand Junction or the City of Grand Junction.' "
-        "Limit your answer to one or two short paragraphs.\n\n"
-        f"{context}\nUser: {p.inputs}\nAssistant:"
-    )
+    
+    PROMPT_TMPL = """<s>[INST] 
+    You are a helpful Grand Junction travel assistant.  
+    Answer using **only** the sources below.  
+    Write **exactly two short paragraphs** (4-6 sentences total).  
+    Do **not** repeat the question, do **not** add lists, FAQs, or headings.  
+    When you are finished, output the word ###END on its own line – nothing after that. [/INST]
+
+    {context}
+
+    [INST] {question} [/INST]
+    """
+    prompt = PROMPT_TMPL.format(context=context, question=p.inputs)
+
+    # --- tokenise prompt ---------------------------------------------------
+    enc = TOKENIZER(prompt, return_tensors="pt").to(MODEL.device)
+    n_prompt = enc.input_ids.shape[1]             # prompt token count
+
+
+    class StopOnEnd(StoppingCriteria):
+        END_IDS = TOKENIZER("###END").input_ids
+        def __call__(self, input_ids, scores, **kwargs):
+            # stop if the last |END_IDS| tokens equal the sentinel
+            return list(input_ids[0][-len(self.END_IDS):].cpu().numpy()) == self.END_IDS
+
+    stops = StoppingCriteriaList([StopOnEnd()])
+
+    # --- generate ----------------------------------------------------------
     output = MODEL.generate(
-        **TOKENIZER(prompt, return_tensors="pt").to(MODEL.device),
-        max_new_tokens=200,
+        **enc, 
+        max_new_tokens=CFG.max_new_tokens,
+        stopping_criteria=stops,
+        temperature=0.2,              # keeps it concise
     )
-    answer = (
-        TOKENIZER.decode(output[0], skip_special_tokens=True)
-        .split("Assistant:")[-1]
-        .strip()
+
+    # --- token accounting --------------------------------------------------
+    n_total  = output.shape[1]                    # prompt + continuation
+    n_answer = n_total - n_prompt                 # just the new tokens
+    print(f"[TOKENS] prompt={n_prompt}  answer={n_answer}  total={n_total}")
+
+    # (optional) include in JSON payload
+    # ---------------------------------------------------------------
+    DISCLAIMER = (
+        "⚠️  Portfolio demo only. "
+        "Opinions are Daniel Short’s and do **not** represent Visit Grand Junction "
+        "or the City of Grand Junction.\n\n"
     )
-    return {"generated_text": answer, "sources": sources}
+
+    answer_text = TOKENIZER.decode(output[0][n_prompt:], skip_special_tokens=True)
+    answer_text = answer_text.split("###END")[0].strip()
+
+    return {
+        "generated_text": DISCLAIMER + answer_text,
+        "sources": sources,
+        "token_usage": {
+            "prompt": n_prompt,
+            "answer": n_answer,
+            "total": n_total,
+        },
+    }
 
 
 if __name__ == "__main__":
