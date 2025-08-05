@@ -41,7 +41,12 @@ def invoke(p: Prompt):
             f"Embedding dimension {query_emb.shape[0]} does not match index dimension {INDEX.d}"
         )
     _, ids = INDEX.search(query_emb.reshape(1, -1), 5)
-    context = " ".join(METADATA[i]["text"] for i in ids[0])
+    hits = [METADATA[i] for i in ids[0]]
+    context = "\n".join(f"{h['source']}: {h['text']}" for h in hits)
+    sources = []
+    for h in hits:
+        if h["source"] not in sources:
+            sources.append(h["source"])
     prompt = (
         "Answer the *single* question below using only the listed sources. "
         "Do not add additional questions, FAQs, or headings. "
@@ -54,10 +59,13 @@ def invoke(p: Prompt):
         **TOKENIZER(prompt, return_tensors="pt").to(MODEL.device),
         max_new_tokens=200,
     )
-    answer = TOKENIZER.decode(output[0], skip_special_tokens=True).split("Assistant:")[
-        -1
-    ]
-    return {"generated_text": answer}
+    answer = (
+        TOKENIZER.decode(output[0], skip_special_tokens=True)
+        .split("Assistant:")[-1]
+        .strip()
+    )
+    answer += "\n\nSources: " + ", ".join(sources)
+    return {"generated_text": answer, "sources": sources}
 
 
 if __name__ == "__main__":
