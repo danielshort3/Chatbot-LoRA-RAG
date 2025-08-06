@@ -9,7 +9,6 @@ RUN pip install --no-cache-dir -r /tmp/req.txt && rm /tmp/req.txt
 WORKDIR /app
 COPY serve.py .
 COPY inference.py .
-COPY gradio_vgj_chat.py .
 COPY pyproject.toml .
 COPY README.md .
 COPY vgj_chat ./vgj_chat
