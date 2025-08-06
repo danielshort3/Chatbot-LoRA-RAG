@@ -16,6 +16,9 @@ DEFAULT_LORA = "data/lora-vgj-checkpoint"
 DEFAULT_OUT = "data/mistral-merged-4bit"
 MODEL_CACHE = Path("data/model_cache")
 
+# must match special tokens used during fine-tuning
+SPECIAL_TOKENS = {"additional_special_tokens": ["<CONTEXT>", "</CONTEXT>"]}
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Merge LoRA adapter into base model")
@@ -39,6 +42,13 @@ def main() -> None:
         bnb_4bit_compute_dtype=torch.float16,
         bnb_4bit_use_double_quant=True,
     )
+
+    tok = AutoTokenizer.from_pretrained(
+        args.base_model, use_fast=True, token=token, cache_dir=MODEL_CACHE
+    )
+    tok.add_special_tokens(SPECIAL_TOKENS)
+    tok.pad_token = tok.eos_token
+
     base = AutoModelForCausalLM.from_pretrained(
         args.base_model,
         device_map="auto",
@@ -47,12 +57,10 @@ def main() -> None:
         token=token,
         cache_dir=MODEL_CACHE,
     )
+    base.resize_token_embeddings(len(tok))
+
     lora = PeftModel.from_pretrained(base, args.lora_dir)
     merged = lora.merge_and_unload()
-
-    tok = AutoTokenizer.from_pretrained(
-        args.base_model, use_fast=True, token=token, cache_dir=MODEL_CACHE
-    )
     merged.save_pretrained(out_dir)
     tok.save_pretrained(out_dir)
     print(f"Merged model saved to {out_dir}")
