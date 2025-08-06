@@ -72,4 +72,9 @@ def chat(question: str) -> str:
 # backwards-compat alias; drop if unused
 run_enhanced = chat
 
-__all__ = ["chat", "run_enhanced"]
+
+def answer_stream(question: str):
+    """Yield a single answer for compatibility with older APIs."""
+    yield chat(question)
+
+__all__ = ["chat", "run_enhanced", "answer_stream"]

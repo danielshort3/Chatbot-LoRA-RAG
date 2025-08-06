@@ -14,6 +14,8 @@ class DummyVector(list):
 
 class DummyEmbedder:
     def encode(self, query, normalize_embeddings=True):
+        if isinstance(query, list):
+            return [DummyVector([0.0, 0.0, 0.0]) for _ in query]
         return DummyVector([0.0, 0.0, 0.0])
 
 
@@ -29,7 +31,12 @@ class DummyReranker:
 
 def setup_module(module):
     rag.INDEX = DummyIndex()
-    rag.TEXTS = ["t1", "t2", "t3", "t4"]
+    rag.TEXTS = [
+        "t1 a. t1 b. t1 c. t1 d.",
+        "t2 a. t2 b. t2 c. t2 d.",
+        "t3 a. t3 b. t3 c. t3 d.",
+        "t4 a. t4 b. t4 c. t4 d.",
+    ]
     rag.URLS = ["u1", "u1", "u2", "u3"]
     rag.EMBEDDER = DummyEmbedder()
     rag.RERANKER = DummyReranker()
@@ -51,3 +58,14 @@ def test_retrieve_unique_shape():
         assert isinstance(text, str)
         assert isinstance(url, str)
     assert results[0][0] >= results[1][0]
+
+
+def test_retrieve_windows_shape():
+    results = rag.retrieve_windows("q")
+    assert isinstance(results, list)
+    assert len(results) <= 3
+    for block in results:
+        assert block.startswith("<DOC_ID:")
+        assert "<URL:" in block
+        assert "<DATE:" in block
+        assert "<PARA_ID:" in block

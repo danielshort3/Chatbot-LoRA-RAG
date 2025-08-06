@@ -6,7 +6,7 @@ import types
 from . import baseline as _baseline
 from . import boot as _boot_mod
 from .generation import answer_stream, chat, run_enhanced
-from .retrieval import retrieve_unique
+from .retrieval import SentenceWindowRetriever, retrieve_unique, retrieve_windows
 
 _baseline_mode = _baseline._baseline_mode
 
@@ -41,6 +41,8 @@ sys.modules[__name__].__class__ = _RagModule  # type: ignore[misc]
 
 __all__ = [
     "retrieve_unique",
+    "retrieve_windows",
+    "SentenceWindowRetriever",
     "answer_stream",
     "chat",
     "run_enhanced",
