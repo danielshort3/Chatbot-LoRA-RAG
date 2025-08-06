@@ -60,6 +60,12 @@ def upsert_hash(url: str, h: str) -> None:
     HASH_RECORDS.write_text(json.dumps(HASH_DB))
 
 
+def short_url(url: str, base: str = BASE_URL, n: int = 20) -> str:
+    prefix = base.rstrip("/") + "/"
+    remainder = url[len(prefix) :] if url.startswith(prefix) else url
+    return prefix + remainder[:n] if url.startswith(prefix) else remainder[:n]
+
+
 class RateLimiter:
     def __init__(self, delay: float):
         self.delay = delay
@@ -149,7 +155,7 @@ async def worker(
         if url in seen:
             continue
         seen.add(url)
-        bar.set_description(f"{name} {url}")
+        bar.set_description(f"{name} {short_url(url)}")
         mime, body = await fetch(session, url, rl)
         if not body:
             bar.update()
