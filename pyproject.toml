@@ -10,7 +10,6 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 dependencies = [
-    "gradio",
     "faiss-cpu==1.8.0",
     "sentence-transformers",
     "bitsandbytes",
@@ -51,7 +50,6 @@ line-length = 88
 extend-exclude = [
   "archive",
   "scripts",
-  "gradio_vgj_chat.py",
   "vgj_chat/data/*",
   "vgj_chat/models/*",
 ]
