@@ -56,7 +56,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--learning-rate", type=float, default=2e-4)
     parser.add_argument("--logging-steps", type=int, default=10)
-    parser.add_argument("--eval-steps", type=int, default=50)
+    parser.add_argument("--eval-steps", type=int, default=10)
     parser.add_argument("--lora-r", type=int, default=16)
     parser.add_argument("--lora-alpha", type=int, default=32)
     parser.add_argument("--lora-dropout", type=float, default=0.05)
