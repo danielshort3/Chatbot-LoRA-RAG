@@ -8,14 +8,12 @@ import torch  # type: ignore
 # Import `pipeline` from modern transformers, fall back to legacy path if needed
 try:
     from transformers import pipeline
-except (ModuleNotFoundError):
+except ModuleNotFoundError:
     from transformers.pipeline import pipeline
 
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    BitsAndBytesConfig
-)
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
+SPECIAL_TOKENS = {"additional_special_tokens": ["<CONTEXT>", "</CONTEXT>"]}
 
 from . import boot as _boot
 from .boot import logger
@@ -33,6 +31,7 @@ def _load_baseline_chat() -> pipeline:
     tok = AutoTokenizer.from_pretrained(
         _boot.CFG.base_model, use_fast=True, cache_dir=_boot.MODEL_CACHE
     )
+    tok.add_special_tokens(SPECIAL_TOKENS)
     model = AutoModelForCausalLM.from_pretrained(
         _boot.CFG.base_model,
         quantization_config=quant_cfg,
@@ -40,6 +39,7 @@ def _load_baseline_chat() -> pipeline:
         torch_dtype=torch.float16,
         cache_dir=_boot.MODEL_CACHE,
     )
+    model.resize_token_embeddings(len(tok))
     return pipeline(
         "text-generation",
         model=model,

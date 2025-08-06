@@ -30,6 +30,8 @@ from transformers import (
     set_seed,
 )
 
+SPECIAL_TOKENS = {"additional_special_tokens": ["<CONTEXT>", "</CONTEXT>"]}
+
 MODEL_CACHE = Path("data/model_cache")
 
 
@@ -208,6 +210,7 @@ def main() -> None:
     tokenizer = AutoTokenizer.from_pretrained(
         args.model_name, use_fast=True, token=token, cache_dir=MODEL_CACHE
     )
+    tokenizer.add_special_tokens(SPECIAL_TOKENS)
     tokenizer.pad_token = tokenizer.eos_token
 
     if torch.cuda.is_available():
@@ -229,6 +232,8 @@ def main() -> None:
         base = AutoModelForCausalLM.from_pretrained(
             args.model_name, token=token, cache_dir=MODEL_CACHE
         )
+
+    base.resize_token_embeddings(len(tokenizer))
     # Some tokenizers report an extremely large model_max_length (e.g. 1e30) to
     # signify "no limit", which overflows the Rust implementation used by
     # `tokenizers` when passed as `max_length`.  Clamp the tokenizer length to
