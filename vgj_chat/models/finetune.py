@@ -1,4 +1,20 @@
-"""LoRA fine‑tuning helper – fixed for latest `trl` (≥0.8.0)."""
+"""LoRA/QLoRA fine‑tuning helper.
+
+This script follows the recommended recipe for adapting
+``mistralai/Mistral-7B-Instruct-v0.2`` into the Visit Grand Junction
+travel‑agent model.  It mirrors the steps described in the rough guide:
+
+* load the Mistral tokenizer without the fast backend and register
+  optional special tokens (``<CONTEXT>``, ``</CONTEXT>``) that can be used
+  when injecting retrieved chunks during RAG inference;
+* quantise the base model to 4‑bit weights and apply a LoRA adapter to
+  the major linear layers (``q_proj``, ``k_proj``, ``v_proj``, ``o_proj``,
+  ``gate_proj``, ``up_proj`` and ``down_proj``) with rank 16 and zero
+  dropout as suggested by Unsloth;
+* train with a small per‑device batch size and gradient accumulation to
+  reach an effective batch size of ~16 and enable gradient
+  checkpointing to reduce memory usage.
+"""
 
 from __future__ import annotations
 
@@ -34,16 +50,33 @@ AUTO_QA_JL = Path("data/dataset/vgj_auto_dataset.jsonl")
 CHECKPOINT_DIR = Path("data/lora-vgj-checkpoint")
 MODEL_CACHE = Path("data/model_cache")
 
+# LoRA/QLoRA hyper‑parameters
 LORA_R = 16
-LORA_ALPHA = 32
-LORA_DROPOUT = 0.05
-BATCH_PER_GPU = 4
-GRAD_ACC_STEPS = 4
-LOG_STEPS = 1
-EVAL_STEPS = 1
+LORA_ALPHA = 16
+LORA_DROPOUT = 0.0
+TARGET_MODULES = [
+    "q_proj",
+    "k_proj",
+    "v_proj",
+    "o_proj",
+    "gate_proj",
+    "up_proj",
+    "down_proj",
+]
+
+# training hyper‑parameters
+BATCH_PER_GPU = 2
+GRAD_ACC_STEPS = 8
+LOG_STEPS = 10
+EVAL_STEPS = 50
 PATIENCE = 3
-EPOCHS = 10
+EPOCHS = 2
 LR = 2e-4
+WARMUP_RATIO = 0.1
+WEIGHT_DECAY = 0.01
+
+# optional special tokens for RAG context delimitation
+SPECIAL_TOKENS = {"additional_special_tokens": ["<CONTEXT>", "</CONTEXT>"]}
 
 
 # --------------------------------------------------------------------------- #
@@ -62,8 +95,9 @@ def run_finetune() -> None:
 
     # ----------------------- tokenizer ------------------------------------ #
     tok = AutoTokenizer.from_pretrained(
-        BASE_MODEL, use_fast=True, token=hf_token, cache_dir=MODEL_CACHE
+        BASE_MODEL, use_fast=False, token=hf_token, cache_dir=MODEL_CACHE
     )
+    tok.add_special_tokens(SPECIAL_TOKENS)
     tok.pad_token = tok.eos_token
 
     # ----------------------- base model ----------------------------------- #
@@ -90,6 +124,7 @@ def run_finetune() -> None:
             cache_dir=MODEL_CACHE,
         )
 
+    base.resize_token_embeddings(len(tok))
     base = prepare_model_for_kbit_training(base)
 
     # ----------------------- LoRA adapter --------------------------------- #
@@ -99,10 +134,12 @@ def run_finetune() -> None:
         lora_dropout=LORA_DROPOUT,
         bias="none",
         task_type="CAUSAL_LM",
+        target_modules=TARGET_MODULES,
     )
     model = get_peft_model(base, lora_cfg)
     model.config.use_cache = False  # avoid grad‑checkpoint/cache clash
     model.print_trainable_parameters()
+    model.gradient_checkpointing_enable()
 
     # ----------------------- grad‑debug callback -------------------------- #
     class GradDebugCallback(TrainerCallback):
@@ -139,19 +176,25 @@ def run_finetune() -> None:
             return control
 
     # ----------------------- dataset -------------------------------------- #
-    dataset = load_dataset("json", data_files=str(AUTO_QA_JL))["train"].rename_columns(
-        {"input": "prompt", "output": "response"}
-    )
+    dataset = load_dataset("json", data_files=str(AUTO_QA_JL))["train"]
+    if {"input", "output"}.issubset(set(dataset.column_names)):
+        dataset = dataset.rename_columns({"input": "prompt", "output": "response"})
+
     split = dataset.train_test_split(test_size=0.1, seed=42)
     train_set, eval_set = split["train"], split["test"]
 
     print(f"[Dataset] train_examples={len(train_set)}  eval_examples={len(eval_set)}")
     first = train_set[0]
-    print(
-        f"[Dataset] sample prompt={first['prompt']!r}  response={first['response']!r}"
-    )
+    if "messages" in first:
+        print(f"[Dataset] sample messages={first['messages']!r}")
+    else:
+        print(
+            f"[Dataset] sample prompt={first['prompt']!r}  response={first['response']!r}"
+        )
 
     def format_example(ex: dict) -> str:
+        if "messages" in ex:
+            return tok.apply_chat_template(ex["messages"], tokenize=False)
         return tok.apply_chat_template(
             [
                 {"role": "user", "content": ex["prompt"].strip()},
@@ -169,7 +212,8 @@ def run_finetune() -> None:
         num_train_epochs=EPOCHS,
         learning_rate=LR,
         lr_scheduler_type="cosine",
-        warmup_ratio=0.03,
+        warmup_ratio=WARMUP_RATIO,
+        weight_decay=WEIGHT_DECAY,
         logging_steps=LOG_STEPS,
         eval_strategy="steps",
         eval_steps=EVAL_STEPS,
