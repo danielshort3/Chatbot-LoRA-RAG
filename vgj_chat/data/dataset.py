@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import re
 from pathlib import Path
 
@@ -16,6 +17,8 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 LLM_NAME = "mistralai/Mistral-7B-Instruct-v0.2"
 PARA_MAX = 3
 ANSWER_TOK_CAP = 220
+CTX_MAX = 5
+SPECIAL_TOKENS = {"additional_special_tokens": ["<CONTEXT>", "</CONTEXT>"]}
 
 TXT_DIR = Path("data/html_txt")
 RAW_HTML_DIR = Path("data/raw_html")
@@ -39,6 +42,20 @@ def _gen_question(passage: str, tok: AutoTokenizer, llm: AutoModelForCausalLM) -
     return q if q.endswith("?") else q + "?"
 
 
+def _gen_context(question: str, tok: AutoTokenizer, llm: AutoModelForCausalLM) -> str:
+    sys = (
+        "You are a helpful travel assistant. Invent a short context passage of "
+        "2-3 sentences that could help answer the QUESTION. Do not answer the "
+        "question directly."
+    )
+    prompt = f"<s>[INST] <<SYS>>\n{sys}\n<</SYS>>\n\nQUESTION: {question}\n[/INST]"
+    ids = tok(prompt, return_tensors="pt").to(llm.device)
+    with torch.no_grad():
+        out = llm.generate(**ids, max_new_tokens=80, pad_token_id=tok.eos_token_id)[0]
+    ctx = tok.decode(out[ids.input_ids.shape[-1] :], skip_special_tokens=True).strip()
+    return ctx
+
+
 BOILER_PAT = re.compile(
     r"(click here|minute read|photo credit|browser is not supported)", re.I
 )
@@ -56,6 +73,7 @@ def build_auto_dataset() -> None:
     tok = AutoTokenizer.from_pretrained(
         LLM_NAME, use_fast=True, token=hf_token, cache_dir=MODEL_CACHE
     )
+    tok.add_special_tokens(SPECIAL_TOKENS)
     if torch.cuda.is_available():
         quant_cfg = BitsAndBytesConfig(
             load_in_4bit=True,
@@ -79,6 +97,8 @@ def build_auto_dataset() -> None:
             cache_dir=MODEL_CACHE,
         )
 
+    llm.resize_token_embeddings(len(tok))
+
     AUTO_QA_JL.parent.mkdir(parents=True, exist_ok=True)
     auto_examples = []
     skipped = 0
@@ -100,7 +120,15 @@ def build_auto_dataset() -> None:
         if BOILER_PAT.search(answer):
             skipped += 1
             continue
-        auto_examples.append({"input": question, "output": answer})
+
+        num_ctx = random.randint(0, CTX_MAX)
+        ctx_blocks = [
+            f"<CONTEXT>\n{_gen_context(question, tok, llm)}\n</CONTEXT>"
+            for _ in range(num_ctx)
+        ]
+        ctx_str = "\n\n".join(ctx_blocks)
+        prompt = f"{ctx_str}\n\n{question}" if ctx_blocks else question
+        auto_examples.append({"input": prompt, "output": answer})
     with AUTO_QA_JL.open("w") as f:
         for ex in auto_examples:
             f.write(json.dumps(ex) + "\n")
