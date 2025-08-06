@@ -20,6 +20,7 @@ INDEX = faiss.read_index(str(MODEL_DIR / "faiss.index"))
 EMBEDDER = SentenceTransformer(
     "sentence-transformers/all-MiniLM-L6-v2",
     device="cuda" if torch.cuda.is_available() else "cpu",
+    cache_folder=str(MODEL_DIR),
 )
 METADATA = [json.loads(line) for line in open(MODEL_DIR / "meta.jsonl")]
 

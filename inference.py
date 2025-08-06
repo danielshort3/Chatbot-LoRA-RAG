@@ -5,6 +5,7 @@ from typing import Any, Dict
 import faiss
 import torch
 from sagemaker_inference import model_server
+from sentence_transformers import SentenceTransformer
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from vgj_chat.config import CFG
 
@@ -20,7 +21,18 @@ def model_fn(model_dir: str) -> Dict[str, Any]:
     index = faiss.read_index(os.path.join(model_dir, "faiss.index"))
     meta_path = os.path.join(model_dir, "meta.jsonl")
     meta = [json.loads(line) for line in open(meta_path)]
-    return {"lm": model, "tok": tok, "index": index, "meta": meta}
+    embedder = SentenceTransformer(
+        "sentence-transformers/all-MiniLM-L6-v2",
+        device="cuda" if torch.cuda.is_available() else "cpu",
+        cache_folder=model_dir,
+    )
+    return {
+        "lm": model,
+        "tok": tok,
+        "index": index,
+        "meta": meta,
+        "encoder": embedder,
+    }
 
 
 def predict_fn(data, ctx):
@@ -28,18 +40,12 @@ def predict_fn(data, ctx):
     prompt = data["inputs"]
     top_k = data.get("top_k", 3)
 
-    emb_query = (
-        mdl["lm"]
-        .get_input_embeddings()(
-            torch.tensor(mdl["tok"](prompt)["input_ids"]).to("cuda")
+    emb_query = mdl["encoder"].encode(prompt, normalize_embeddings=True)
+    if emb_query.shape[0] != mdl["index"].d:
+        raise ValueError(
+            f"Embedding dimension {emb_query.shape[0]} does not match index dimension {mdl['index'].d}"
         )
-        .mean(0)
-        .detach()
-        .cpu()
-        .numpy()
-    )
-
-    _distances, indices = mdl["index"].search(emb_query[None, :], top_k)
+    _distances, indices = mdl["index"].search(emb_query.reshape(1, -1), top_k)
     retrieved = "\n".join(mdl["meta"][idx]["text"] for idx in indices[0])
 
     aug_prompt = f"{retrieved}\n\n### Question:\n{prompt}\n### Answer:"
