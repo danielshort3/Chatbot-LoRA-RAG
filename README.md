@@ -1,6 +1,6 @@
 # Chatbot-LoRa-RAG
 
-A lightweight Retrieval-Augmented Generation (RAG) demo that fine‑tunes a language model with LoRA, merges the adapter into a 4‑bit Mistral‑7B model and serves a Gradio chat UI. The code lives in the `vgj_chat` package and includes helper scripts for crawling pages, building an index and training or merging the adapter.
+A lightweight Retrieval-Augmented Generation (RAG) demo that fine‑tunes a language model with LoRA, merges the adapter into a 4‑bit Mistral‑7B model and exposes a FastAPI endpoint for inference. The code lives in the `vgj_chat` package and includes helper scripts for crawling pages, building an index and training or merging the adapter.
 
 ## Installation
 
@@ -23,19 +23,23 @@ Skip manual setup by running the project in Docker:
 
 ```bash
 docker build -t vgj-chat .
-docker run --gpus all -p 7860:7860 -e VGJ_HF_TOKEN=<token> vgj-chat
+docker run --gpus all -p 8080:8080 -e VGJ_HF_TOKEN=<token> vgj-chat
 ```
 
 ## Quick start
 
-Launch the chat UI with your Hugging Face token. The generator loads a merged
-4‑bit model by default:
+Start the FastAPI server to perform local inference:
 
 ```bash
-python -m vgj_chat --hf-token <HF_TOKEN>
+python serve.py
 ```
 
-The default model `mistralai/Mistral-7B-Instruct-v0.2` is gated on Hugging Face, so the token is mandatory.
+Send a request:
+
+```bash
+curl -X POST localhost:8080/invocations -H 'Content-Type: application/json' \
+    -d '{"inputs": "What is there to do in Grand Junction?"}'
+```
 
 ## Pipeline
 
@@ -44,9 +48,6 @@ Run all preparation steps (crawl pages, build the index, fine‑tune and merge) 
 ```bash
 python scripts/run_pipeline.py
 ```
-
-Pass `--launch-chatbot false` to skip opening the chat UI once the pipeline
-completes.
 
 Set `VGJ_HF_TOKEN` so the scripts can download the base model. Each script in `scripts/` can also be run individually.
 
@@ -74,15 +75,7 @@ fine‑tuning and inference—will use CUDA when available.
 
 ## Using a LoRA adapter
 
-After fine‑tuning the adapter it can be merged into a 4‑bit quantized model using `scripts/merge_lora.py`. The resulting model directory is loaded automatically when you launch the chat UI. Set `VGJ_LORA_DIR` if you want to load a different checkpoint before merging and `VGJ_MERGED_MODEL_DIR` to change the directory used for inference.
-
-## Compare mode
-
-Add `--compare` to start a dual-chat UI showing answers from the LoRA+FAISS pipeline beside a raw baseline:
-
-```bash
-python -m vgj_chat --hf-token <HF_TOKEN> --compare
-```
+After fine‑tuning the adapter it can be merged into a 4‑bit quantized model using `scripts/merge_lora.py`. The resulting model directory is loaded automatically when the FastAPI server starts. Set `VGJ_LORA_DIR` if you want to load a different checkpoint before merging and `VGJ_MERGED_MODEL_DIR` to change the directory used for inference.
 
 ## Docker
 
@@ -98,10 +91,10 @@ installation uses `requirements.sagemaker.txt` during the build.
 
 ## Configuration
 
-Default settings live in `vgj_chat.config.Config`. Override any option via environment variables prefixed `VGJ_` or with the matching CLI flag. Example:
+Default settings live in `vgj_chat.config.Config`. Override any option via environment variables prefixed `VGJ_`. Example:
 
 ```bash
-python -m vgj_chat --index-path my.index --top-k 3 --debug true
+VGJ_INDEX_PATH=my.index VGJ_TOP_K=3 VGJ_DEBUG=true python serve.py
 ```
 
 ## Contributing
