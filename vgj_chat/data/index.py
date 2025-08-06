@@ -1,4 +1,4 @@
-"""Utilities to chunk HTML text and build a FAISS index."""
+"""Utilities to build a FAISS index over sentence windows."""
 
 from __future__ import annotations
 
@@ -15,27 +15,16 @@ from tqdm.auto import tqdm
 
 logger = logging.getLogger(__name__)
 
-CHUNK_TOKENS = 200
-OVERLAP_TOKENS = 40
-
-
-def chunks(
-    text: str, max_tok: int = CHUNK_TOKENS, ov: int = OVERLAP_TOKENS
-) -> Iterable[str]:
-    """Yield sentence-overlapping chunks of roughly ``max_tok`` words."""
+def windowize(text: str, size: int = 3, stride: int = 1) -> Iterable[str]:
+    """Yield sentence windows of ``size`` with ``stride`` overlap."""
     sents = nltk.sent_tokenize(text)
-    buf: list[str] = []
-    cur = 0
-    for s in sents:
-        n = len(s.split())
-        if cur + n > max_tok and buf:
-            yield " ".join(buf)
-            buf = buf[-ov:] if ov else []
-            cur = sum(len(t.split()) for t in buf)
-        buf.append(s)
-        cur += n
-    if buf:
-        yield " ".join(buf)
+    if not sents:
+        return
+    if len(sents) <= size:
+        yield " ".join(sents)
+        return
+    for i in range(0, len(sents) - size + 1, stride):
+        yield " ".join(sents[i : i + size])
 
 
 def build_index(
@@ -45,7 +34,7 @@ def build_index(
     embed_model: str,
     max_docs: int | None = None,
 ) -> None:
-    """Chunk ``txt_dir`` and build a FAISS index + metadata file."""
+    """Windowize ``txt_dir`` and build a FAISS index + metadata file."""
     for res in ("punkt", "punkt_tab"):
         try:
             nltk.data.find(f"tokenizers/{res}")
@@ -61,28 +50,30 @@ def build_index(
     index = None
     meta_f = meta_path.open("w")
     files = sorted(txt_dir.glob("*.txt"))
-    count = 0
-    for f in tqdm(files, desc="chunk->embed->index", unit="doc"):
+    doc_id = 0
+    for f in tqdm(files, desc="window->embed->index", unit="doc"):
         url = (f.parent / f"{f.stem}.url").read_text().strip()
         if url.startswith("https://www.visitgrandjunction.com/blog/all-posts"):
             continue
         text = f.read_text()
-        doc_chunks = list(chunks(text))
-        if not doc_chunks:
+        windows = list(windowize(text))
+        if not windows:
             continue
         vecs = embedder.encode(
-            doc_chunks,
+            windows,
             convert_to_numpy=True,
             normalize_embeddings=True,
             show_progress_bar=False,
         )
-        for chunk, vec in zip(doc_chunks, vecs):
+        for window_idx, vec in enumerate(vecs):
             if index is None:
                 index = faiss.IndexFlatIP(vec.shape[0])
             index.add(vec.reshape(1, -1))
-            meta_f.write(json.dumps({"url": url, "text": chunk}) + "\n")
-        count += 1
-        if max_docs is not None and count >= max_docs:
+            meta_f.write(
+                json.dumps({"doc_id": doc_id, "window_idx": window_idx}) + "\n"
+            )
+        doc_id += 1
+        if max_docs is not None and doc_id >= max_docs:
             break
     meta_f.close()
     if index is not None:
