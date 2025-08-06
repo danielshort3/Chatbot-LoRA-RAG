@@ -4,11 +4,11 @@ from contextlib import contextmanager
 from typing import Generator
 
 import torch  # type: ignore
+from transformers.pipeline import pipeline
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
-    BitsAndBytesConfig,
-    pipeline,
+    BitsAndBytesConfig
 )
 
 from . import boot as _boot
