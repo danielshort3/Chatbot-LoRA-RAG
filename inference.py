@@ -6,7 +6,17 @@ import faiss
 import torch
 from sagemaker_inference import model_server
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 from vgj_chat.config import CFG
+
+SYSTEM_PROMPT = (
+    "You are a friendly travel expert representing Visit Grand Junction. "
+    "Use the supplied context excerpts to answer questions about Grand Junction, "
+    "Colorado and its surroundings in a warm, adventurous tone that highlights "
+    "outdoor recreation, local culture, and natural beauty. If the context does "
+    "not contain the needed information, say you don't know and recommend "
+    "checking official Visit Grand Junction resources."
+)
 
 
 def model_fn(model_dir: str) -> Dict[str, Any]:
@@ -40,9 +50,17 @@ def predict_fn(data, ctx):
     )
 
     _distances, indices = mdl["index"].search(emb_query[None, :], top_k)
-    retrieved = "\n".join(mdl["meta"][idx]["text"] for idx in indices[0])
+    retrieved = "\n".join(
+        f"<CONTEXT>{mdl['meta'][idx]['text']}</CONTEXT>" for idx in indices[0]
+    )
 
-    aug_prompt = f"{retrieved}\n\n### Question:\n{prompt}\n### Answer:"
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": f"{retrieved}\n\n{prompt}"},
+    ]
+    aug_prompt = mdl["tok"].apply_chat_template(
+        messages, tokenize=False, add_generation_prompt=True
+    )
     input_ids = mdl["tok"](aug_prompt, return_tensors="pt").to("cuda")
     gen_ids = mdl["lm"].generate(**input_ids, max_new_tokens=CFG.max_new_tokens)
     answer = mdl["tok"].decode(gen_ids[0], skip_special_tokens=True)
