@@ -46,12 +46,22 @@ def predict_fn(data, ctx):
             f"Embedding dimension {emb_query.shape[0]} does not match index dimension {mdl['index'].d}"
         )
     _distances, indices = mdl["index"].search(emb_query.reshape(1, -1), top_k)
-    retrieved = "\n".join(mdl["meta"][idx]["text"] for idx in indices[0])
+    retrieved = "\n".join(
+        f"<CONTEXT>{mdl['meta'][idx]['text']}</CONTEXT>" for idx in indices[0]
+    )
 
-    aug_prompt = f"{retrieved}\n\n### Question:\n{prompt}\n### Answer:"
-    input_ids = mdl["tok"](aug_prompt, return_tensors="pt").to("cuda")
-    gen_ids = mdl["lm"].generate(**input_ids, max_new_tokens=CFG.max_new_tokens)
-    answer = mdl["tok"].decode(gen_ids[0], skip_special_tokens=True)
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a friendly travel expert representing Visit Grand Junction.",
+        },
+        {"role": "user", "content": f"{retrieved}\n\n{prompt}"},
+    ]
+    input_ids = mdl["tok"].apply_chat_template(
+        messages, return_tensors="pt", add_generation_prompt=True
+    ).to("cuda")
+    gen_ids = mdl["lm"].generate(input_ids=input_ids, max_new_tokens=CFG.max_new_tokens)
+    answer = mdl["tok"].decode(gen_ids[0][input_ids.shape[1]:], skip_special_tokens=True)
     return {"generated_text": answer}
 
 
