@@ -16,7 +16,13 @@ except Exception:  # pragma: no cover - fallback for tests
 
 
 from sentence_transformers import CrossEncoder, SentenceTransformer
-from transformers.pipeline import pipeline
+
+# Import `pipeline` from modern transformers, fall back to legacy path if needed
+try:
+    from transformers import pipeline
+except (ModuleNotFoundError):
+    from transformers.pipeline import pipeline
+
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,

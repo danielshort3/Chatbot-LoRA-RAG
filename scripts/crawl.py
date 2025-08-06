@@ -11,22 +11,38 @@ from vgj_chat.data.crawl import (
     sitemap_seed,
 )
 
+
+def ensure_trailing_slash(url: str) -> str:
+    """
+    Return *url* with a trailing slash added to its **path** component
+    if one is missing.
+
+    - ``https://example.com``        → ``https://example.com/``
+    - ``https://example.com/foo``    → ``https://example.com/foo/``
+    - ``https://example.com/foo/``   → (unchanged)
+    """
+    parts = urlparse(url)
+    path = parts.path or "/"
+    if not path.endswith("/"):
+        path += "/"
+    return urlunparse(parts._replace(path=path))
+
+
 def prefer_https(urls: set[str]) -> set[str]:
     """
-    Ensure that, when both http://example.com/foo and https://example.com/foo
-    exist, only the https:// version is kept.
-
-    Works by keying on the *netloc + path + params + query + fragment* portion
-    of the URL, ignoring the scheme.
+    • Ensure every URL ends with a trailing “/”.
+    • When both http:// and https:// versions exist, keep only https://.
     """
     canonical: dict[tuple[str, str, str, str, str], str] = {}
     for u in urls:
+        u = ensure_trailing_slash(u)          # ← NEW
         parts = urlparse(u)
+
+        # key ignores scheme so http/https compete
         key = (parts.netloc, parts.path, parts.params, parts.query, parts.fragment)
 
         # Prefer HTTPS if we’ve seen both schemes for the same key
         if key not in canonical or parts.scheme == "https":
-            # Re-assemble the URL to keep any normalization consistent
             canonical[key] = urlunparse(parts)
 
     return set(canonical.values())

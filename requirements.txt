@@ -6,5 +6,3 @@ git+https://github.com/huggingface/transformers.git@v4.51.0
 trl
 peft
 sentence-transformers
-build
-
