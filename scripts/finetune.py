@@ -50,20 +50,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--prompt-field", type=str, default="input")
     parser.add_argument("--response-field", type=str, default="output")
     parser.add_argument("--batch-size", type=int, default=4)
-    parser.add_argument("--gradient-accumulation", type=int, default=4)
-    parser.add_argument("--epochs", type=int, default=100)
+    parser.add_argument("--gradient-accumulation", type=int, default=8)
+    parser.add_argument("--epochs", type=int, default=2)
     parser.add_argument("--learning-rate", type=float, default=2e-4)
     parser.add_argument("--logging-steps", type=int, default=10)
     parser.add_argument("--eval-steps", type=int, default=4)
     parser.add_argument("--lora-r", type=int, default=16)
-    parser.add_argument("--lora-alpha", type=int, default=32)
-    parser.add_argument("--lora-dropout", type=float, default=0.05)
+    parser.add_argument("--lora-alpha", type=int, default=16)
+    parser.add_argument("--lora-dropout", type=float, default=0.0)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
-        "--patience", type=int, default=8, help="Early stopping patience"
+        "--patience", type=int, default=3, help="Early stopping patience"
     )
     parser.add_argument(
-        "--lr-patience", type=int, default=4, help="Patience before reducing LR"
+        "--lr-patience", type=int, default=2, help="Patience before reducing LR"
     )
     parser.add_argument(
         "--lr-decay-factor", type=float, default=0.5, help="LR reduction factor"
