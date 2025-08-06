@@ -51,7 +51,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--response-field", type=str, default="output")
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--gradient-accumulation", type=int, default=4)
-    parser.add_argument("--epochs", type=int, default=4)
+    parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--learning-rate", type=float, default=2e-4)
     parser.add_argument("--logging-steps", type=int, default=10)
     parser.add_argument("--eval-steps", type=int, default=50)
@@ -88,6 +88,11 @@ def parse_args() -> argparse.Namespace:
 # Data handling
 # ---------------------------------------------------------------------------
 
+system_prompt = """You are a friendly travel expert representing Visit Grand Junction. 
+Answer questions about Grand Junction, Colorado and its surroundings in a warm, adventurous tone that highlights outdoor recreation, local culture, and natural beauty. 
+Keep responses concise, factual, and helpful; avoid speculation or invented details. 
+If you are unsure or lack information, say so and suggest checking official Visit Grand Junction resources."""
+
 
 def load_and_tokenize(
     data_path: str,
@@ -105,8 +110,10 @@ def load_and_tokenize(
 
     def _format(example: Dict[str, str]) -> str:
         """Apply chat template for a single example."""
+
         return tokenizer.apply_chat_template(
             [
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": example[prompt_field].strip()},
                 {"role": "assistant", "content": example[response_field].strip()},
             ],
