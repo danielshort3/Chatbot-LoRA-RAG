@@ -62,21 +62,16 @@ def _gen_context(
         f"ANSWER_SNIPPET: {answer_part}\n[/INST]"
     )
     ids = tok(prompt, return_tensors="pt").to(llm.device)
-    for _ in range(3):
-        with torch.no_grad():
-            out = llm.generate(
-                **ids,
-                max_new_tokens=80,
-                pad_token_id=tok.eos_token_id,
-                do_sample=True,
-                temperature=0.7,
-                top_p=0.9,
-            )[0]
-        ctx = tok.decode(out[ids.input_ids.shape[-1] :], skip_special_tokens=True).strip()
-        sentences = re.findall(r"[^.!?]+[.!?]", ctx)
-        if len(sentences) >= 2:
-            keep = min(len(sentences), random.choice([2, 3]))
-            return " ".join(s.strip() for s in sentences[:keep])
+    with torch.no_grad():
+        out = llm.generate(
+            **ids,
+            max_new_tokens=80,
+            pad_token_id=tok.eos_token_id,
+            do_sample=True,
+            temperature=0.7,
+            top_p=0.9,
+        )[0]
+    ctx = tok.decode(out[ids.input_ids.shape[-1] :], skip_special_tokens=True).strip()
     return ctx
 
 
@@ -149,15 +144,9 @@ def build_auto_dataset() -> None:
         ctx_blocks: list[str] = []
         if available_parts:
             max_ctx = min(len(available_parts), CTX_MAX)
-            if max_ctx:
-                if max_ctx < 2:
-                    num_ctx = max_ctx
-                else:
-                    num_ctx = round(random.gauss(3, 1))
-                    num_ctx = max(2, min(4, num_ctx))
-                    num_ctx = min(num_ctx, max_ctx)
-                ctx_parts = random.sample(available_parts, k=num_ctx)
-                for part in ctx_parts:
+            num_ctx = random.randint(0, max_ctx)
+            if num_ctx:
+                for part in random.sample(available_parts, k=num_ctx):
                     ctx_blocks.append(
                         f"<CONTEXT>\n{_gen_context(question, part, tok, llm)}\n</CONTEXT>"
                     )
