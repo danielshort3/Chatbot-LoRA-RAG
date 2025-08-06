@@ -18,12 +18,12 @@ except Exception:  # pragma: no cover - fallback for tests
 
 
 from sentence_transformers import CrossEncoder, SentenceTransformer
+from transformers.pipelines import pipeline
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     BitsAndBytesConfig,
-    TextIteratorStreamer,
-    pipeline,
+    TextIteratorStreamer
 )
 
 from ..config import CFG
