@@ -42,16 +42,35 @@ def _gen_question(passage: str, tok: AutoTokenizer, llm: AutoModelForCausalLM) -
     return q if q.endswith("?") else q + "?"
 
 
-def _gen_context(question: str, tok: AutoTokenizer, llm: AutoModelForCausalLM) -> str:
+def _gen_context(
+    question: str, answer_part: str, tok: AutoTokenizer, llm: AutoModelForCausalLM
+) -> str:
+    """Generate a short context passage supporting *answer_part* for *question*.
+
+    The language model samples a 2–3 sentence block that helps address the
+    portion of the answer specified by ``answer_part``. Sampling is enabled so
+    repeated calls yield varied passages.
+    """
+
     sys = (
         "You are a helpful travel assistant. Invent a short context passage of "
-        "2-3 sentences that could help answer the QUESTION. Do not answer the "
-        "question directly."
+        "2-3 sentences that could help answer the QUESTION, focusing on the "
+        "ANSWER_SNIPPET. Do not answer the question directly."
     )
-    prompt = f"<s>[INST] <<SYS>>\n{sys}\n<</SYS>>\n\nQUESTION: {question}\n[/INST]"
+    prompt = (
+        f"<s>[INST] <<SYS>>\n{sys}\n<</SYS>>\n\nQUESTION: {question}\n"
+        f"ANSWER_SNIPPET: {answer_part}\n[/INST]"
+    )
     ids = tok(prompt, return_tensors="pt").to(llm.device)
     with torch.no_grad():
-        out = llm.generate(**ids, max_new_tokens=80, pad_token_id=tok.eos_token_id)[0]
+        out = llm.generate(
+            **ids,
+            max_new_tokens=80,
+            pad_token_id=tok.eos_token_id,
+            do_sample=True,
+            temperature=0.7,
+            top_p=0.9,
+        )[0]
     ctx = tok.decode(out[ids.input_ids.shape[-1] :], skip_special_tokens=True).strip()
     return ctx
 
@@ -110,22 +129,28 @@ def build_auto_dataset() -> None:
             continue
         passage = "\n\n".join(paras)
         question = _gen_question(passage, tok, llm)
-        words, answer_words = 0, []
+        words, answer_words, used_paras = 0, [], []
         for p in paras:
             if words + len(p.split()) > ANSWER_TOK_CAP:
                 break
             answer_words.extend(p.split())
             words += len(p.split())
+            used_paras.append(p)
         answer = " ".join(answer_words) or paras[0]
         if BOILER_PAT.search(answer):
             skipped += 1
             continue
-
-        num_ctx = random.randint(0, CTX_MAX)
-        ctx_blocks = [
-            f"<CONTEXT>\n{_gen_context(question, tok, llm)}\n</CONTEXT>"
-            for _ in range(num_ctx)
-        ]
+        available_parts = used_paras
+        ctx_blocks: list[str] = []
+        if available_parts:
+            max_ctx = min(len(available_parts), CTX_MAX)
+            num_ctx = random.randint(0, max_ctx)
+            if num_ctx:
+                for part in random.sample(available_parts, k=num_ctx):
+                    ctx_blocks.append(
+                        f"<CONTEXT>\n{_gen_context(question, part, tok, llm)}\n</CONTEXT>"
+                    )
+                random.shuffle(ctx_blocks)
         ctx_str = "\n\n".join(ctx_blocks)
         prompt = f"{ctx_str}\n\n{question}" if ctx_blocks else question
         auto_examples.append({"input": prompt, "output": answer})
