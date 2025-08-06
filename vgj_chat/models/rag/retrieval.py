@@ -155,7 +155,10 @@ class SentenceWindowRetriever:
             used_paras.add((windows[chosen].doc_id, windows[chosen].para_id))
 
         blocks = [
-            f"<DOC_ID:{windows[i].doc_id}> <URL:{windows[i].url}> <DATE:{windows[i].date}>\n{windows[i].text}"
+            (
+                f"<DOC_ID:{windows[i].doc_id}> <PARA_ID:{windows[i].para_id}> "
+                f"<URL:{windows[i].url}> <DATE:{windows[i].date}>\n{windows[i].text}"
+            )
             for i in selected
         ]
         return blocks

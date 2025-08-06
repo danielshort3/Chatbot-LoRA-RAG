@@ -68,3 +68,4 @@ def test_retrieve_windows_shape():
         assert block.startswith("<DOC_ID:")
         assert "<URL:" in block
         assert "<DATE:" in block
+        assert "<PARA_ID:" in block
