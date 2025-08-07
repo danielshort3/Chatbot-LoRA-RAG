@@ -67,7 +67,12 @@ def invoke(p: Prompt):
     messages = [
         {
             "role": "system",
-            "content": "You are a friendly travel expert representing Visit Grand Junction.",
+            "content": (
+                "You are a friendly travel expert representing Visit Grand Junction. "
+                "Only discuss attractions in Grand Junction, Colorado. "
+                "If asked about other destinations, prices, or deals, politely state that you can only "
+                "talk about Grand Junction. Limit your response to one or two short paragraphs."
+            ),
         },
         {"role": "user", "content": f"{context}\n\n{p.inputs}"},
     ]
@@ -83,6 +88,8 @@ def invoke(p: Prompt):
         input_ids=input_ids,
         max_new_tokens=CFG.max_new_tokens,
         temperature=0.2,  # keeps it concise
+        eos_token_id=TOKENIZER.eos_token_id,
+        pad_token_id=TOKENIZER.eos_token_id,
     )
 
     # --- token accounting --------------------------------------------------
@@ -102,8 +109,13 @@ def invoke(p: Prompt):
         output[0][n_prompt:], skip_special_tokens=True
     ).strip()
 
+    src_text = ", ".join(sources)
+    generated = DISCLAIMER + answer_text
+    if src_text:
+        generated += f"\n\nSources: {src_text}"
+
     return {
-        "generated_text": DISCLAIMER + answer_text,
+        "generated_text": generated,
         "sources": sources,
         "token_usage": {
             "prompt": n_prompt,
