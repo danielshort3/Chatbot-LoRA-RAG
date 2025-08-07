@@ -14,6 +14,8 @@ from vgj_chat.utils.text import token_len
 CRAWL_TXT_DIR = Path("data/html_txt")
 AUTO_QA_JL = Path("data/dataset/vgj_auto_dataset.jsonl")
 LORA_DIR = Path("data/lora-vgj-checkpoint")
+INDEX_PATH = Path("data/faiss.index")
+META_PATH = Path("data/meta.jsonl")
 
 # ──────────────────────────────────────────────────────────
 # NEW CONSTANTS
@@ -96,12 +98,15 @@ def main() -> None:
             crawl_cmd.extend(["--limit", str(args.limit)])
         steps.append(crawl_cmd)
 
-    steps.extend(
-        [
-            ["python", "scripts/build_index.py"],
-            ["python", "scripts/build_dataset.py"],
-        ]
-    )
+    if INDEX_PATH.exists() and META_PATH.exists():
+        print("FAISS index and metadata already exist; skipping build")
+    else:
+        steps.append(["python", "scripts/build_index.py"])
+
+    if AUTO_QA_JL.exists():
+        print(f"{AUTO_QA_JL} exists; skipping dataset build")
+    else:
+        steps.append(["python", "scripts/build_dataset.py"])
 
     if (LORA_DIR / "adapter_model.safetensors").exists():
         print(f"{LORA_DIR} exists; skipping fine-tune step")
@@ -117,30 +122,33 @@ def main() -> None:
         subprocess.run(cmd, check=True)
 
     # ---------- NEW FILE-GATHERING LOGIC ----------
-    # 1. Prep clean DEST_DIR
-    if DEST_DIR.exists():
-        shutil.rmtree(DEST_DIR)
-    DEST_DIR.mkdir(parents=True, exist_ok=True)
-
-    # 2. Copy merged model files into DEST_DIR
-    if MERGED_SRC.exists():
-        for src_path in MERGED_SRC.iterdir():
-            shutil.copy2(src_path, DEST_DIR / src_path.name)
+    if ARCHIVE.exists():
+        print(f"{ARCHIVE} exists; skipping archive step")
     else:
-        raise FileNotFoundError(
-            f"{MERGED_SRC} not found – make sure merge_lora.py completed."
-        )
+        # 1. Prep clean DEST_DIR
+        if DEST_DIR.exists():
+            shutil.rmtree(DEST_DIR)
+        DEST_DIR.mkdir(parents=True, exist_ok=True)
 
-    # 3. Copy index & metadata
-    shutil.copy2("data/faiss.index", DEST_DIR / "faiss.index")
-    shutil.copy2("data/meta.jsonl", DEST_DIR / "meta.jsonl")
+        # 2. Copy merged model files into DEST_DIR
+        if MERGED_SRC.exists():
+            for src_path in MERGED_SRC.iterdir():
+                shutil.copy2(src_path, DEST_DIR / src_path.name)
+        else:
+            raise FileNotFoundError(
+                f"{MERGED_SRC} not found – make sure merge_lora.py completed."
+            )
 
-    # 4. Tar up *contents* (not parent dir) into model.tar.gz
-    with tarfile.open(ARCHIVE, "w:gz") as tar:
-        for file_path in DEST_DIR.iterdir():
-            tar.add(file_path, arcname=file_path.name)
+        # 3. Copy index & metadata
+        shutil.copy2(INDEX_PATH, DEST_DIR / "faiss.index")
+        shutil.copy2(META_PATH, DEST_DIR / "meta.jsonl")
 
-    print(f"Created {ARCHIVE} containing {len(list(DEST_DIR.iterdir()))} files.")
+        # 4. Tar up *contents* (not parent dir) into model.tar.gz
+        with tarfile.open(ARCHIVE, "w:gz") as tar:
+            for file_path in DEST_DIR.iterdir():
+                tar.add(file_path, arcname=file_path.name)
+
+        print(f"Created {ARCHIVE} containing {len(list(DEST_DIR.iterdir()))} files.")
 
     if args.question:
         print(_answer(args.question))
