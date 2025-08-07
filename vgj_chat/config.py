@@ -28,7 +28,7 @@ class Config:
     # RAG settings
     top_k: int = 5
     score_min: float = 0.0
-    max_new_tokens: int = 256
+    max_new_tokens: int = 512
 
     # similarity guard-rail
     sim_threshold: float = 0.50
