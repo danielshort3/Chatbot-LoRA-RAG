@@ -8,6 +8,7 @@ import torch
 from sagemaker_inference import model_server
 from sentence_transformers import SentenceTransformer
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 from vgj_chat.config import CFG
 
 CACHE_DIR = Path(os.environ.get("TRANSFORMERS_CACHE", "/tmp/hf_cache"))
@@ -15,10 +16,13 @@ CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def model_fn(model_dir: str) -> Dict[str, Any]:
+    device = "cuda" if CFG.cuda and torch.cuda.is_available() else "cpu"
+    torch_dtype = torch.float16 if device == "cuda" else torch.float32
+
     model = AutoModelForCausalLM.from_pretrained(
         model_dir,
-        torch_dtype=torch.float16,
-        device_map="auto",
+        torch_dtype=torch_dtype,
+        device_map="auto" if device == "cuda" else {"": device},
         trust_remote_code=True,
     )
     tok = AutoTokenizer.from_pretrained(model_dir, use_fast=True)
@@ -27,7 +31,7 @@ def model_fn(model_dir: str) -> Dict[str, Any]:
     meta = [json.loads(line) for line in open(meta_path)]
     embedder = SentenceTransformer(
         "sentence-transformers/all-MiniLM-L6-v2",
-        device="cuda" if torch.cuda.is_available() else "cpu",
+        device=device,
         cache_folder=str(CACHE_DIR),
     )
     return {
@@ -36,6 +40,7 @@ def model_fn(model_dir: str) -> Dict[str, Any]:
         "index": index,
         "meta": meta,
         "encoder": embedder,
+        "device": device,
     }
 
 
@@ -61,10 +66,11 @@ def predict_fn(data, ctx):
         },
         {"role": "user", "content": f"{retrieved}\n\n{prompt}"},
     ]
+    device = mdl["device"]
     input_ids = (
         mdl["tok"]
         .apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True)
-        .to("cuda")
+        .to(device)
     )
     gen_ids = mdl["lm"].generate(input_ids=input_ids, max_new_tokens=CFG.max_new_tokens)
     answer = mdl["tok"].decode(

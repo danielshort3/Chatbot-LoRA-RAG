@@ -24,6 +24,8 @@ Skip manual setup by running the project in Docker:
 ```bash
 docker build -t vgj-chat .
 docker run --gpus all -p 8080:8080 -e VGJ_HF_TOKEN=<token> vgj-chat
+# run on the CPU instead of the GPU
+docker run -p 8080:8080 -e VGJ_CUDA=false -e VGJ_HF_TOKEN=<token> vgj-chat
 ```
 
 ## Quick start

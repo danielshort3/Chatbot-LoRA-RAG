@@ -9,19 +9,25 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 from vgj_chat.config import CFG
 
 MODEL_DIR = pathlib.Path("/opt/ml/model")
 CACHE_DIR = pathlib.Path(os.environ.get("TRANSFORMERS_CACHE", "/tmp/hf_cache"))
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+DEVICE = "cuda" if CFG.cuda and torch.cuda.is_available() else "cpu"
+
 TOKENIZER = AutoTokenizer.from_pretrained(MODEL_DIR)
 MODEL = AutoModelForCausalLM.from_pretrained(
-    MODEL_DIR, torch_dtype="auto", device_map="auto"
+    MODEL_DIR,
+    torch_dtype="auto",
+    device_map="auto" if DEVICE == "cuda" else {"": DEVICE},
 )
 INDEX = faiss.read_index(str(MODEL_DIR / "faiss.index"))
 EMBEDDER = SentenceTransformer(
     "sentence-transformers/all-MiniLM-L6-v2",
-    device="cuda" if torch.cuda.is_available() else "cpu",
+    device=DEVICE,
     cache_folder=str(CACHE_DIR),
 )
 METADATA = [json.loads(line) for line in open(MODEL_DIR / "meta.jsonl")]
