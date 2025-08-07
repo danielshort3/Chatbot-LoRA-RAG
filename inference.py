@@ -1,5 +1,6 @@
 import json
 import os
+from pathlib import Path
 from typing import Any, Dict
 
 import faiss
@@ -8,6 +9,9 @@ from sagemaker_inference import model_server
 from sentence_transformers import SentenceTransformer
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from vgj_chat.config import CFG
+
+CACHE_DIR = Path(os.environ.get("TRANSFORMERS_CACHE", "/tmp/hf_cache"))
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def model_fn(model_dir: str) -> Dict[str, Any]:
@@ -24,7 +28,7 @@ def model_fn(model_dir: str) -> Dict[str, Any]:
     embedder = SentenceTransformer(
         "sentence-transformers/all-MiniLM-L6-v2",
         device="cuda" if torch.cuda.is_available() else "cpu",
-        cache_folder=model_dir,
+        cache_folder=str(CACHE_DIR),
     )
     return {
         "lm": model,
@@ -57,11 +61,15 @@ def predict_fn(data, ctx):
         },
         {"role": "user", "content": f"{retrieved}\n\n{prompt}"},
     ]
-    input_ids = mdl["tok"].apply_chat_template(
-        messages, return_tensors="pt", add_generation_prompt=True
-    ).to("cuda")
+    input_ids = (
+        mdl["tok"]
+        .apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True)
+        .to("cuda")
+    )
     gen_ids = mdl["lm"].generate(input_ids=input_ids, max_new_tokens=CFG.max_new_tokens)
-    answer = mdl["tok"].decode(gen_ids[0][input_ids.shape[1]:], skip_special_tokens=True)
+    answer = mdl["tok"].decode(
+        gen_ids[0][input_ids.shape[1] :], skip_special_tokens=True
+    )
     return {"generated_text": answer}
 
 

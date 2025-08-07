@@ -1,4 +1,5 @@
 import json
+import os
 import pathlib
 
 import faiss
@@ -11,6 +12,8 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from vgj_chat.config import CFG
 
 MODEL_DIR = pathlib.Path("/opt/ml/model")
+CACHE_DIR = pathlib.Path(os.environ.get("TRANSFORMERS_CACHE", "/tmp/hf_cache"))
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
 TOKENIZER = AutoTokenizer.from_pretrained(MODEL_DIR)
 MODEL = AutoModelForCausalLM.from_pretrained(
     MODEL_DIR, torch_dtype="auto", device_map="auto"
@@ -19,7 +22,7 @@ INDEX = faiss.read_index(str(MODEL_DIR / "faiss.index"))
 EMBEDDER = SentenceTransformer(
     "sentence-transformers/all-MiniLM-L6-v2",
     device="cuda" if torch.cuda.is_available() else "cpu",
-    cache_folder=str(MODEL_DIR),
+    cache_folder=str(CACHE_DIR),
 )
 METADATA = [json.loads(line) for line in open(MODEL_DIR / "meta.jsonl")]
 
@@ -65,18 +68,18 @@ def invoke(p: Prompt):
     input_ids = TOKENIZER.apply_chat_template(
         messages, return_tensors="pt", add_generation_prompt=True
     ).to(MODEL.device)
-    n_prompt = input_ids.shape[1]             # prompt token count
+    n_prompt = input_ids.shape[1]  # prompt token count
 
     # --- generate ----------------------------------------------------------
     output = MODEL.generate(
         input_ids=input_ids,
         max_new_tokens=CFG.max_new_tokens,
-        temperature=0.2,              # keeps it concise
+        temperature=0.2,  # keeps it concise
     )
 
     # --- token accounting --------------------------------------------------
-    n_total  = output.shape[1]                    # prompt + continuation
-    n_answer = n_total - n_prompt                 # just the new tokens
+    n_total = output.shape[1]  # prompt + continuation
+    n_answer = n_total - n_prompt  # just the new tokens
     print(f"[TOKENS] prompt={n_prompt}  answer={n_answer}  total={n_total}")
 
     # (optional) include in JSON payload
@@ -87,7 +90,9 @@ def invoke(p: Prompt):
         "or the City of Grand Junction.\n\n"
     )
 
-    answer_text = TOKENIZER.decode(output[0][n_prompt:], skip_special_tokens=True).strip()
+    answer_text = TOKENIZER.decode(
+        output[0][n_prompt:], skip_special_tokens=True
+    ).strip()
 
     return {
         "generated_text": DISCLAIMER + answer_text,
