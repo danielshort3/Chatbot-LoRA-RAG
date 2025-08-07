@@ -55,20 +55,29 @@ def predict_fn(data, ctx):
             f"Embedding dimension {emb_query.shape[0]} does not match index dimension {mdl['index'].d}"
         )
     _distances, indices = mdl["index"].search(emb_query.reshape(1, -1), top_k)
-    retrieved_parts = []
+    context_parts = []
+    sources: list[str] = []
     for idx in indices[0]:
         meta = mdl["meta"][idx]
+        src = meta.get("source") or meta.get("url") or "unknown"
         text = meta.get("text")
         if text:
-            retrieved_parts.append(f"<CONTEXT>{text}</CONTEXT>")
-    retrieved = "\n".join(retrieved_parts)
+            context_parts.append(f"<CONTEXT>{src}: {text}</CONTEXT>")
+        if src not in sources:
+            sources.append(src)
+    context = "\n".join(context_parts)
 
     messages = [
         {
             "role": "system",
-            "content": "You are a friendly travel expert representing Visit Grand Junction.",
+            "content": (
+                "You are a friendly travel expert representing Visit Grand Junction. "
+                "Only discuss attractions in Grand Junction, Colorado. "
+                "If asked about other destinations, prices, or deals, politely state that you can only "
+                "talk about Grand Junction. Limit your response to one or two short paragraphs."
+            ),
         },
-        {"role": "user", "content": f"{retrieved}\n\n{prompt}"},
+        {"role": "user", "content": f"{context}\n\n{prompt}"},
     ]
     device = mdl["device"]
     input_ids = (
@@ -76,11 +85,40 @@ def predict_fn(data, ctx):
         .apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True)
         .to(device)
     )
-    gen_ids = mdl["lm"].generate(input_ids=input_ids, max_new_tokens=CFG.max_new_tokens)
-    answer = mdl["tok"].decode(
-        gen_ids[0][input_ids.shape[1] :], skip_special_tokens=True
+    n_prompt = input_ids.shape[1]
+    gen_ids = mdl["lm"].generate(
+        input_ids=input_ids,
+        max_new_tokens=CFG.max_new_tokens,
+        temperature=0.2,
+        eos_token_id=mdl["tok"].eos_token_id,
+        pad_token_id=mdl["tok"].eos_token_id,
     )
-    return {"generated_text": answer}
+    n_total = gen_ids.shape[1]
+    n_answer = n_total - n_prompt
+    answer_text = mdl["tok"].decode(
+        gen_ids[0][n_prompt:], skip_special_tokens=True
+    ).strip()
+
+    DISCLAIMER = (
+        "⚠️  Portfolio demo only. "
+        "Opinions are Daniel Short’s and do **not** represent Visit Grand Junction "
+        "or the City of Grand Junction.\n\n"
+    )
+
+    src_text = ", ".join(sources)
+    generated = DISCLAIMER + answer_text
+    if src_text:
+        generated += f"\n\nSources: {src_text}"
+
+    return {
+        "generated_text": generated,
+        "sources": sources,
+        "token_usage": {
+            "prompt": n_prompt,
+            "answer": n_answer,
+            "total": n_total,
+        },
+    }
 
 
 if __name__ == "__main__":

@@ -65,12 +65,20 @@ def build_index(
             normalize_embeddings=True,
             show_progress_bar=False,
         )
-        for window_idx, vec in enumerate(vecs):
+        for window_idx, (win_text, vec) in enumerate(zip(windows, vecs)):
             if index is None:
                 index = faiss.IndexFlatIP(vec.shape[0])
             index.add(vec.reshape(1, -1))
             meta_f.write(
-                json.dumps({"doc_id": doc_id, "window_idx": window_idx}) + "\n"
+                json.dumps(
+                    {
+                        "doc_id": doc_id,
+                        "window_idx": window_idx,
+                        "text": win_text,
+                        "url": url,
+                    }
+                )
+                + "\n"
             )
         doc_id += 1
         if max_docs is not None and doc_id >= max_docs:
