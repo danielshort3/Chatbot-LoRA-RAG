@@ -51,7 +51,9 @@ def invoke(p: Prompt):
     sources: list[str] = []
     for h in hits:
         src = h.get("source") or h.get("url") or "unknown"
-        context_parts.append(f"<CONTEXT>{src}: {h['text']}</CONTEXT>")
+        text = h.get("text")
+        if text:
+            context_parts.append(f"<CONTEXT>{src}: {text}</CONTEXT>")
         if src not in sources:
             sources.append(src)
     context = "\n".join(context_parts)

@@ -50,9 +50,13 @@ def predict_fn(data, ctx):
             f"Embedding dimension {emb_query.shape[0]} does not match index dimension {mdl['index'].d}"
         )
     _distances, indices = mdl["index"].search(emb_query.reshape(1, -1), top_k)
-    retrieved = "\n".join(
-        f"<CONTEXT>{mdl['meta'][idx]['text']}</CONTEXT>" for idx in indices[0]
-    )
+    retrieved_parts = []
+    for idx in indices[0]:
+        meta = mdl["meta"][idx]
+        text = meta.get("text")
+        if text:
+            retrieved_parts.append(f"<CONTEXT>{text}</CONTEXT>")
+    retrieved = "\n".join(retrieved_parts)
 
     messages = [
         {
