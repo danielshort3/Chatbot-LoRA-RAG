@@ -3,17 +3,13 @@ import os
 from pathlib import Path
 
 import torch
-from peft import PeftModel
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    BitsAndBytesConfig,
-)
 from huggingface_hub import login
+from peft import PeftModel
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
-DEFAULT_BASE = "mistralai/Mistral-7B-Instruct-v0.2"
+DEFAULT_BASE = "openai/gpt-oss-20b"
 DEFAULT_LORA = "data/lora-vgj-checkpoint"
-DEFAULT_OUT = "data/mistral-merged-4bit"
+DEFAULT_OUT = "data/gpt-oss-20b-merged-4bit"
 MODEL_CACHE = Path("data/model_cache")
 
 # must match special tokens used during fine-tuning

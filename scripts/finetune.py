@@ -45,9 +45,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--data", type=str, required=True, help="JSONL file with Q&A pairs"
     )
-    parser.add_argument(
-        "--model-name", type=str, default="mistralai/Mistral-7B-Instruct-v0.2"
-    )
+    parser.add_argument("--model-name", type=str, default="openai/gpt-oss-20b")
     parser.add_argument("--output-dir", type=str, default="data/lora-vgj-checkpoint")
     parser.add_argument("--prompt-field", type=str, default="input")
     parser.add_argument("--response-field", type=str, default="output")
