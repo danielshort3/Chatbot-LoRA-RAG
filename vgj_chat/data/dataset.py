@@ -228,9 +228,22 @@ BOILER_PAT = re.compile(
 # ---------------------------------------------------------------------------
 
 def build_auto_dataset() -> None:
+    txt_files = sorted(TXT_DIR.glob("*.txt"))
     if AUTO_QA_JL.exists():
-        print(f"{AUTO_QA_JL} exists; skipping dataset build")
-        return
+        try:
+            with AUTO_QA_JL.open() as f:
+                qa_count = sum(1 for _ in f)
+        except OSError:
+            qa_count = -1
+        if qa_count >= len(txt_files) and qa_count != -1:
+            print(
+                f"{AUTO_QA_JL} exists with {qa_count} pairs; skipping dataset build"
+            )
+            return
+        else:
+            print(
+                f"{AUTO_QA_JL} incomplete ({qa_count}/{len(txt_files)}); rebuilding dataset"
+            )
 
     AUTO_QA_JL.parent.mkdir(parents=True, exist_ok=True)
     print(f"Starting Ollama server for {LLM_NAME} …")
@@ -239,7 +252,7 @@ def build_auto_dataset() -> None:
     auto_examples: list[dict[str, str]] = []
     skipped = 0
     try:
-        for txt_f in tqdm(sorted(TXT_DIR.glob("*.txt")), desc="auto-QA", unit="page"):
+        for txt_f in tqdm(txt_files, desc="auto-QA", unit="page"):
             html = (RAW_HTML_DIR / f"{txt_f.stem}.html").read_text()
             text = trafilatura.extract(html) or ""
             paras = [p.strip() for p in text.splitlines() if len(p.split()) > 25][:PARA_MAX]

@@ -73,6 +73,51 @@ def test_build_auto_dataset_starts_server(monkeypatch, tmp_path):
     assert calls["ensure"] == 1
 
 
+def test_build_auto_dataset_rebuilds_when_incomplete(monkeypatch, tmp_path):
+    dataset = _load_dataset(monkeypatch, "text")
+
+    calls = {"popen": 0}
+
+    class DummyProc:
+        def poll(self):
+            return None
+
+        def terminate(self):
+            return None
+
+        def wait(self, timeout=None):
+            return None
+
+    def popen(cmd, stdout=None, stderr=None):
+        calls["popen"] += 1
+        return DummyProc()
+
+    monkeypatch.setattr(dataset.subprocess, "Popen", popen)
+    monkeypatch.setattr(dataset, "_wait_for_server", lambda proc: True)
+    monkeypatch.setattr(dataset, "_stop_model", lambda: None)
+    monkeypatch.setattr(dataset, "_ensure_model", lambda: None)
+
+    # provide trafilatura.extract to return enough text
+    tra = ModuleType("trafilatura")
+    tra.extract = lambda html: "word " * 30
+    monkeypatch.setattr(dataset, "trafilatura", tra)
+
+    # create input files and an empty existing dataset file
+    monkeypatch.setattr(dataset, "TXT_DIR", tmp_path)
+    monkeypatch.setattr(dataset, "RAW_HTML_DIR", tmp_path)
+    txt_file = tmp_path / "page.txt"
+    txt_file.write_text("dummy")
+    (tmp_path / "page.html").write_text("<p>dummy</p>")
+    auto_jl = tmp_path / "out.jsonl"
+    auto_jl.write_text("")
+    monkeypatch.setattr(dataset, "AUTO_QA_JL", auto_jl)
+
+    dataset.build_auto_dataset()
+
+    assert calls["popen"] == 1
+    with auto_jl.open() as f:
+        assert sum(1 for _ in f) == 1
+
 def test_start_server_missing_binary(monkeypatch):
     dataset = _load_dataset(monkeypatch, "text")
 
