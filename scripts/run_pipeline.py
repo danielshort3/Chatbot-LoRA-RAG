@@ -1,4 +1,5 @@
-﻿import argparse
+import argparse
+import json
 import re
 import shutil
 import subprocess
@@ -7,8 +8,8 @@ from pathlib import Path
 
 import torch  # type: ignore
 
-from vgj_chat.models.rag.retrieval import SentenceWindowRetriever
 from vgj_chat.models.rag import boot as _boot
+from vgj_chat.models.rag.retrieval import SentenceWindowRetriever
 from vgj_chat.utils.text import token_len
 
 CRAWL_TXT_DIR = Path("data/html_txt")
@@ -74,7 +75,7 @@ def _answer(question: str) -> str:
         do_sample=False,
     )
 
-    return tok.decode(generated[0], skip_special_tokens=True)[len(prompt):].strip()
+    return tok.decode(generated[0], skip_special_tokens=True)[len(prompt) :].strip()
 
 
 def main() -> None:
@@ -103,16 +104,19 @@ def main() -> None:
     else:
         steps.append(["python", "scripts/build_index.py"])
 
-    txt_files = list(CRAWL_TXT_DIR.glob("*.txt"))
+    from vgj_chat.data.dataset import count_expected_pairs
+
+    expected_pairs = count_expected_pairs()
+    qa_count = 0
     if AUTO_QA_JL.exists():
         try:
-            with AUTO_QA_JL.open() as f:
-                qa_count = sum(1 for _ in f)
-        except OSError:
-            qa_count = -1
-    else:
-        qa_count = -1
-    if qa_count >= len(txt_files) and qa_count != -1:
+            lines = AUTO_QA_JL.read_text().splitlines()
+            if len(lines) == expected_pairs and lines:
+                json.loads(lines[-1])
+                qa_count = len(lines)
+        except (OSError, json.JSONDecodeError):
+            qa_count = 0
+    if qa_count == expected_pairs and expected_pairs > 0:
         print(f"{AUTO_QA_JL} exists with {qa_count} pairs; skipping dataset build")
     else:
         steps.append(["python", "scripts/build_dataset.py"])

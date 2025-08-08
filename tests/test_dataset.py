@@ -3,7 +3,6 @@ import json
 import re
 import sys
 import types
-
 from types import ModuleType
 
 import pytest
@@ -59,8 +58,14 @@ def test_build_auto_dataset_starts_server(monkeypatch, tmp_path):
 
     monkeypatch.setattr(dataset.subprocess, "Popen", popen)
     monkeypatch.setattr(dataset, "_wait_for_server", lambda proc: True)
-    monkeypatch.setattr(dataset, "_stop_model", lambda: calls.__setitem__("stop", calls["stop"] + 1))
-    monkeypatch.setattr(dataset, "_ensure_model", lambda: calls.__setitem__("ensure", calls["ensure"] + 1))
+    monkeypatch.setattr(
+        dataset, "_stop_model", lambda: calls.__setitem__("stop", calls["stop"] + 1)
+    )
+    monkeypatch.setattr(
+        dataset,
+        "_ensure_model",
+        lambda: calls.__setitem__("ensure", calls["ensure"] + 1),
+    )
 
     monkeypatch.setattr(dataset, "TXT_DIR", tmp_path)
     monkeypatch.setattr(dataset, "RAW_HTML_DIR", tmp_path)
@@ -120,7 +125,7 @@ def test_build_auto_dataset_rebuilds_when_incomplete(monkeypatch, tmp_path):
         assert sum(1 for _ in f) == 1
 
 
-def test_build_auto_dataset_resumes_from_partial(monkeypatch, tmp_path):
+def test_build_auto_dataset_skips_when_complete(monkeypatch, tmp_path):
     dataset = _load_dataset(monkeypatch, "text")
 
     class DummyProc:
@@ -133,7 +138,11 @@ def test_build_auto_dataset_resumes_from_partial(monkeypatch, tmp_path):
         def wait(self, timeout=None):
             return None
 
-    monkeypatch.setattr(dataset.subprocess, "Popen", lambda cmd, stdout=None, stderr=None: DummyProc())
+    monkeypatch.setattr(
+        dataset.subprocess,
+        "Popen",
+        lambda cmd, stdout=None, stderr=None: DummyProc(),
+    )
     monkeypatch.setattr(dataset, "_wait_for_server", lambda proc: True)
     monkeypatch.setattr(dataset, "_stop_model", lambda: None)
     monkeypatch.setattr(dataset, "_ensure_model", lambda: None)
@@ -154,18 +163,36 @@ def test_build_auto_dataset_resumes_from_partial(monkeypatch, tmp_path):
         (tmp_path / f"page{i}.txt").write_text("dummy")
         (tmp_path / f"page{i}.html").write_text("<p>dummy</p>")
 
-    existing = [
-        {"input": "existing1", "output": "out1"},
-        {"input": "existing2", "output": "out2"},
-    ]
+    existing = [{"input": f"existing{i}", "output": f"out{i}"} for i in range(3)]
     auto_jl.write_text("\n".join(json.dumps(e) for e in existing) + "\n")
 
     dataset.build_auto_dataset()
 
     with auto_jl.open() as f:
-        lines = [json.loads(l) for l in f]
-    assert len(lines) == 3
-    assert lines[0]["input"] == "existing1"
+        lines = [json.loads(line) for line in f]
+    assert len(lines) == len(existing)
+    assert lines[0]["input"] == "existing0"
+
+
+def test_count_expected_pairs_filters_boiler(monkeypatch, tmp_path):
+    dataset = _load_dataset(monkeypatch, "text")
+
+    tra = ModuleType("trafilatura")
+    tra.extract = lambda html: (
+        "click here " + "word " * 30 if "boiler" in html else "word " * 30
+    )
+    monkeypatch.setattr(dataset, "trafilatura", tra)
+
+    monkeypatch.setattr(dataset, "TXT_DIR", tmp_path)
+    monkeypatch.setattr(dataset, "RAW_HTML_DIR", tmp_path)
+
+    (tmp_path / "boiler.txt").write_text("dummy")
+    (tmp_path / "boiler.html").write_text("boiler")
+    (tmp_path / "good.txt").write_text("dummy")
+    (tmp_path / "good.html").write_text("good")
+
+    assert dataset.count_expected_pairs() == 1
+
 
 def test_start_server_missing_binary(monkeypatch):
     dataset = _load_dataset(monkeypatch, "text")
@@ -227,4 +254,3 @@ def test_ensure_model_failure(monkeypatch):
 
     with pytest.raises(RuntimeError):
         dataset._ensure_model()
-
