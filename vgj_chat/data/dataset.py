@@ -6,14 +6,13 @@ import json
 import os
 import random
 import re
-from pathlib import Path
 import subprocess
 import time
+from pathlib import Path
 
 import requests
 import trafilatura
 from tqdm.auto import tqdm
-
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -65,6 +64,7 @@ AUTO_QA_JL = Path("data/dataset/vgj_auto_dataset.jsonl")
 # ---------------------------------------------------------------------------
 # Ollama helpers
 # ---------------------------------------------------------------------------
+
 
 def _ollama_generate(prompt: str) -> str:
     """Send ``prompt`` to the Ollama server and return the model response."""
@@ -179,6 +179,7 @@ def _ensure_model() -> None:
 # Text generation utilities
 # ---------------------------------------------------------------------------
 
+
 def _gen_question(passage: str) -> str:
     sys = (
         "You are a helpful travel assistant. Read the PASSAGE and invent one "
@@ -198,9 +199,7 @@ def _gen_context(question: str, answer_part: str) -> str:
         "2-3 sentences that could help answer the QUESTION, focusing on the "
         "ANSWER_SNIPPET. Do not answer the question directly."
     )
-    prompt = (
-        f"{sys}\nQUESTION: {question}\nANSWER_SNIPPET: {answer_part}"
-    )
+    prompt = f"{sys}\nQUESTION: {question}\nANSWER_SNIPPET: {answer_part}"
     for _ in range(3):
         ctx = _ollama_generate(prompt)
         sentences = re.findall(r"[^.!?]+[.!?]", ctx)
@@ -224,11 +223,44 @@ BOILER_PAT = re.compile(
 
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _collect_passages() -> tuple[list[list[str]], int]:
+    """Return paragraphs for each non-boiler page and a skip count."""
+
+    passages: list[list[str]] = []
+    skipped = 0
+    for txt_f in sorted(TXT_DIR.glob("*.txt")):
+        html = (RAW_HTML_DIR / f"{txt_f.stem}.html").read_text()
+        text = trafilatura.extract(html) or ""
+        paras = [p.strip() for p in text.splitlines() if len(p.split()) > 25][:PARA_MAX]
+        if not paras:
+            skipped += 1
+            continue
+        passage = "\n\n".join(paras)
+        if BOILER_PAT.search(passage):
+            skipped += 1
+            continue
+        passages.append(paras)
+    return passages, skipped
+
+
+def count_expected_pairs() -> int:
+    """Return the number of QA pairs expected after boilerplate filtering."""
+
+    passages, _ = _collect_passages()
+    return len(passages)
+
+
+# ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
 
+
 def build_auto_dataset() -> None:
-    txt_files = sorted(TXT_DIR.glob("*.txt"))
+    passages, skipped = _collect_passages()
 
     start_idx = 0
     valid_examples: list[dict[str, str]] = []
@@ -244,10 +276,8 @@ def build_auto_dataset() -> None:
             except json.JSONDecodeError:
                 break
         qa_count = len(valid_examples)
-        if qa_count >= len(txt_files) and qa_count > 0:
-            print(
-                f"{AUTO_QA_JL} exists with {qa_count} pairs; skipping dataset build",
-            )
+        if qa_count == len(passages) and qa_count > 0:
+            print(f"{AUTO_QA_JL} exists with {qa_count} pairs; skipping dataset build")
             return
         if qa_count:
             # drop the last entry to ensure it is regenerated
@@ -256,24 +286,16 @@ def build_auto_dataset() -> None:
             with AUTO_QA_JL.open("w") as f:
                 for ex in valid_examples:
                     f.write(json.dumps(ex) + "\n")
-        print(
-            f"{AUTO_QA_JL} incomplete ({qa_count}/{len(txt_files)}); resuming dataset build",
-        )
+        print(f"{AUTO_QA_JL} incomplete; resuming dataset build")
 
     AUTO_QA_JL.parent.mkdir(parents=True, exist_ok=True)
     print(f"Starting Ollama server for {LLM_NAME} …")
     server = _start_server()
     _ensure_model()
-    skipped = 0
     generated = 0
     try:
         with AUTO_QA_JL.open("a") as f:
-            for txt_f in tqdm(txt_files[start_idx:], desc="auto-QA", unit="page"):
-                html = (RAW_HTML_DIR / f"{txt_f.stem}.html").read_text()
-                text = trafilatura.extract(html) or ""
-                paras = [p.strip() for p in text.splitlines() if len(p.split()) > 25][:PARA_MAX]
-                if not paras:
-                    continue
+            for paras in tqdm(passages[start_idx:], desc="auto-QA", unit="page"):
                 passage = "\n\n".join(paras)
                 question = _gen_question(passage)
                 words, answer_words, used_paras = 0, [], []
@@ -284,9 +306,6 @@ def build_auto_dataset() -> None:
                     words += len(p.split())
                     used_paras.append(p)
                 answer = " ".join(answer_words) or paras[0]
-                if BOILER_PAT.search(answer):
-                    skipped += 1
-                    continue
                 available_parts = used_paras
                 ctx_blocks: list[str] = []
                 if available_parts:
@@ -317,5 +336,5 @@ __all__ = [
     "_gen_question",
     "_gen_context",
     "_choose_num_ctx",
+    "count_expected_pairs",
 ]
-
