@@ -34,3 +34,4 @@ meta.jsonl
 /model
 *.gz
  
+update_model.sh
