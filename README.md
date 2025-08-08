@@ -75,23 +75,6 @@ The pipeline builds the FAISS index on the CPU so no special GPU support is
 required. All other stages—including auto‑generated Q&A creation, LoRA
 fine‑tuning and inference—will use CUDA when available.
 
-### Ollama model for dataset generation
-
-`build_dataset.py` queries the `gpt-oss:20b` model via [Ollama](https://ollama.com/).
-Pull the model on the host and mount your local models directory when running in
-Docker so it can be reused instead of downloaded again:
-
-```bash
-ollama pull gpt-oss:20b  # on the host machine
-
-# run the pipeline with the models dir mounted
-docker run --gpus all \
-  -e HF_TOKEN \
-  -v "$HOME/.ollama:/root/.ollama" \
-  -v "$(pwd)":/workspace vgj-chat \
-  /bin/bash -c "cd /workspace && python scripts/run_pipeline.py"
-```
-
 ## Using a LoRA adapter
 
 After fine‑tuning the adapter it can be merged into a 4‑bit quantized model using `scripts/merge_lora.py`. The resulting model directory is loaded automatically when the FastAPI server starts. Set `VGJ_LORA_DIR` if you want to load a different checkpoint before merging and `VGJ_MERGED_MODEL_DIR` to change the directory used for inference.
