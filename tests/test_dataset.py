@@ -1,4 +1,5 @@
 import importlib
+import json
 import re
 import sys
 import types
@@ -117,6 +118,54 @@ def test_build_auto_dataset_rebuilds_when_incomplete(monkeypatch, tmp_path):
     assert calls["popen"] == 1
     with auto_jl.open() as f:
         assert sum(1 for _ in f) == 1
+
+
+def test_build_auto_dataset_resumes_from_partial(monkeypatch, tmp_path):
+    dataset = _load_dataset(monkeypatch, "text")
+
+    class DummyProc:
+        def poll(self):
+            return None
+
+        def terminate(self):
+            return None
+
+        def wait(self, timeout=None):
+            return None
+
+    monkeypatch.setattr(dataset.subprocess, "Popen", lambda cmd, stdout=None, stderr=None: DummyProc())
+    monkeypatch.setattr(dataset, "_wait_for_server", lambda proc: True)
+    monkeypatch.setattr(dataset, "_stop_model", lambda: None)
+    monkeypatch.setattr(dataset, "_ensure_model", lambda: None)
+
+    tra = ModuleType("trafilatura")
+    tra.extract = lambda html: "word " * 30
+    monkeypatch.setattr(dataset, "trafilatura", tra)
+
+    monkeypatch.setattr(dataset, "_gen_question", lambda passage: "Q")
+    monkeypatch.setattr(dataset, "_choose_num_ctx", lambda max_ctx: 0)
+
+    monkeypatch.setattr(dataset, "TXT_DIR", tmp_path)
+    monkeypatch.setattr(dataset, "RAW_HTML_DIR", tmp_path)
+    auto_jl = tmp_path / "out.jsonl"
+    monkeypatch.setattr(dataset, "AUTO_QA_JL", auto_jl)
+
+    for i in range(3):
+        (tmp_path / f"page{i}.txt").write_text("dummy")
+        (tmp_path / f"page{i}.html").write_text("<p>dummy</p>")
+
+    existing = [
+        {"input": "existing1", "output": "out1"},
+        {"input": "existing2", "output": "out2"},
+    ]
+    auto_jl.write_text("\n".join(json.dumps(e) for e in existing) + "\n")
+
+    dataset.build_auto_dataset()
+
+    with auto_jl.open() as f:
+        lines = [json.loads(l) for l in f]
+    assert len(lines) == 3
+    assert lines[0]["input"] == "existing1"
 
 def test_start_server_missing_binary(monkeypatch):
     dataset = _load_dataset(monkeypatch, "text")

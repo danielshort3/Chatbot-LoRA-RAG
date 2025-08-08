@@ -229,30 +229,41 @@ BOILER_PAT = re.compile(
 
 def build_auto_dataset() -> None:
     txt_files = sorted(TXT_DIR.glob("*.txt"))
+
+    start_idx = 0
+    auto_examples: list[dict[str, str]] = []
+
     if AUTO_QA_JL.exists():
         try:
-            with AUTO_QA_JL.open() as f:
-                qa_count = sum(1 for _ in f)
+            lines = AUTO_QA_JL.read_text().splitlines()
         except OSError:
-            qa_count = -1
-        if qa_count >= len(txt_files) and qa_count != -1:
+            lines = []
+        for line in lines:
+            try:
+                auto_examples.append(json.loads(line))
+            except json.JSONDecodeError:
+                break
+        qa_count = len(auto_examples)
+        if qa_count >= len(txt_files) and qa_count > 0:
             print(
                 f"{AUTO_QA_JL} exists with {qa_count} pairs; skipping dataset build"
             )
             return
-        else:
-            print(
-                f"{AUTO_QA_JL} incomplete ({qa_count}/{len(txt_files)}); rebuilding dataset"
-            )
+        if qa_count:
+            # drop the last entry to ensure it is regenerated
+            auto_examples = auto_examples[:-1]
+            start_idx = len(auto_examples)
+        print(
+            f"{AUTO_QA_JL} incomplete ({qa_count}/{len(txt_files)}); resuming dataset build"
+        )
 
     AUTO_QA_JL.parent.mkdir(parents=True, exist_ok=True)
     print(f"Starting Ollama server for {LLM_NAME} …")
     server = _start_server()
     _ensure_model()
-    auto_examples: list[dict[str, str]] = []
     skipped = 0
     try:
-        for txt_f in tqdm(txt_files, desc="auto-QA", unit="page"):
+        for txt_f in tqdm(txt_files[start_idx:], desc="auto-QA", unit="page"):
             html = (RAW_HTML_DIR / f"{txt_f.stem}.html").read_text()
             text = trafilatura.extract(html) or ""
             paras = [p.strip() for p in text.splitlines() if len(p.split()) > 25][:PARA_MAX]
