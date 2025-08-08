@@ -24,7 +24,7 @@ RUN pip install --no-cache-dir .
 
 ENV VGJ_INDEX_PATH=/opt/ml/model/faiss.index \
     VGJ_META_PATH=/opt/ml/model/meta.jsonl \
-    VGJ_MERGED_MODEL_DIR=/opt/ml/model/gpt-oss-20b-merged-4bit
+    VGJ_MERGED_MODEL_DIR=/opt/ml/model/mistral-merged-4bit
 
 EXPOSE 8080
 ENTRYPOINT ["python", "serve.py"]

@@ -7,8 +7,8 @@ from pathlib import Path
 
 import torch  # type: ignore
 
-from vgj_chat.models.rag import boot as _boot
 from vgj_chat.models.rag.retrieval import SentenceWindowRetriever
+from vgj_chat.models.rag import boot as _boot
 from vgj_chat.utils.text import token_len
 
 CRAWL_TXT_DIR = Path("data/html_txt")
@@ -19,7 +19,7 @@ META_PATH = Path("data/meta.jsonl")
 
 # ──────────────────────────────────────────────────────────
 # NEW CONSTANTS
-MERGED_SRC = Path("data/gpt-oss-20b-merged-4bit")
+MERGED_SRC = Path("data/mistral-merged-4bit")
 DEST_DIR = Path("model")  # or Path("models") if you prefer
 ARCHIVE = Path("model.tar.gz")  # will live in project root
 # ──────────────────────────────────────────────────────────
@@ -74,7 +74,7 @@ def _answer(question: str) -> str:
         do_sample=False,
     )
 
-    return tok.decode(generated[0], skip_special_tokens=True)[len(prompt) :].strip()
+    return tok.decode(generated[0], skip_special_tokens=True)[len(prompt):].strip()
 
 
 def main() -> None:

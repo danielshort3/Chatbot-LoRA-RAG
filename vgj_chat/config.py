@@ -18,10 +18,10 @@ class Config:
     meta_path: Path = Path("data/meta.jsonl")
     lora_dir: Path = Path("data/lora-vgj-checkpoint")
     # directory containing the merged 4-bit model
-    merged_model_dir: Path = Path("data/gpt-oss-20b-merged-4bit")
+    merged_model_dir: Path = Path("data/mistral-merged-4bit")
 
     # models
-    base_model: str = "openai/gpt-oss-20b"
+    base_model: str = "mistralai/Mistral-7B-Instruct-v0.2"
     embed_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     rerank_model: str = "BAAI/bge-reranker-base"
 
