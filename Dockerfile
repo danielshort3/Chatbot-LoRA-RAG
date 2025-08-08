@@ -4,13 +4,8 @@ FROM pytorch/pytorch:2.7.1-cuda12.8-cudnn9-devel
 ################  System deps ##################################
 # Install git and clean up apt cache in the same layer
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends git curl ca-certificates && \
+    apt-get install -y --no-install-recommends git && \
     rm -rf /var/lib/apt/lists/*
-
-# Install Ollama CLI for dataset generation
-RUN curl -L https://ollama.com/download/ollama-linux-amd64 -o /tmp/ollama.tar.gz && \
-    tar -xzf /tmp/ollama.tar.gz -C /usr/local/bin && \
-    rm /tmp/ollama.tar.gz
 
 ################  Install Python deps  #########################
 COPY requirements.txt /tmp/req.txt

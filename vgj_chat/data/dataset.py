@@ -1,4 +1,4 @@
-"""Auto-generate Q&A pairs from crawled pages using an Ollama model."""
+"""Auto-generate Q&A pairs from crawled pages."""
 
 from __future__ import annotations
 
@@ -7,142 +7,50 @@ import os
 import random
 import re
 from pathlib import Path
-import subprocess
-import time
 
-import requests
+import torch
 import trafilatura
+from huggingface_hub import login
 from tqdm.auto import tqdm
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
-
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
-
-# Name of the model to query from Ollama.  The container running the dataset
-# build is expected to have the model pulled locally.
-LLM_NAME = os.getenv("OLLAMA_MODEL", "gpt-oss:20b")
-
-# API endpoint for the running Ollama server.
-API_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434")
-
-# How long the server should keep the model loaded between requests.  This
-# ensures the model stays in memory for the duration of the dataset build and
-# can be unloaded explicitly afterwards.
-KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "30m")
-
-# How long to wait for the Ollama server to become responsive when started.
-STARTUP_TIMEOUT = int(os.getenv("OLLAMA_STARTUP_TIMEOUT", "60"))
-
-# Maximum number of paragraphs to consider per page when generating a question
-# and answer pair.  These constants mirror the previous implementation to keep
-# the dataset format stable.
+LLM_NAME = "mistralai/Mistral-7B-Instruct-v0.2"
 PARA_MAX = 3
 ANSWER_TOK_CAP = 220
 CTX_MAX = 5
-
+SPECIAL_TOKENS = {"additional_special_tokens": ["<CONTEXT>", "</CONTEXT>"]}
 
 TXT_DIR = Path("data/html_txt")
 RAW_HTML_DIR = Path("data/raw_html")
 
 # store auto-generated pairs under data/dataset/
 AUTO_QA_JL = Path("data/dataset/vgj_auto_dataset.jsonl")
+MODEL_CACHE = Path("data/model_cache")
 
 
-# ---------------------------------------------------------------------------
-# Ollama helpers
-# ---------------------------------------------------------------------------
-
-def _ollama_generate(prompt: str) -> str:
-    """Send ``prompt`` to the Ollama server and return the model response."""
-
-    payload = {
-        "model": LLM_NAME,
-        "prompt": prompt,
-        "stream": False,
-        "keep_alive": KEEP_ALIVE,
-    }
-    r = requests.post(f"{API_URL.rstrip('/')}/api/generate", json=payload, timeout=None)
-    r.raise_for_status()
-    return (r.json().get("response") or "").strip()
-
-
-def _wait_for_server(proc: subprocess.Popen) -> bool:
-    """Return ``True`` when the Ollama server is ready to accept requests."""
-
-    version_ep = f"{API_URL.rstrip('/')}/api/version"
-    start = time.time()
-    while time.time() - start < STARTUP_TIMEOUT:
-        if proc.poll() is not None:
-            return False
-        try:
-            r = requests.get(version_ep, timeout=2)
-            if r.ok:
-                return True
-        except Exception:
-            pass
-        time.sleep(1)
-    return False
-
-
-def _start_server() -> subprocess.Popen:
-    """Launch ``ollama serve`` and wait for it to become responsive."""
-    try:
-        proc = subprocess.Popen(
-            ["ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
-    except FileNotFoundError as e:
-        raise FileNotFoundError(
-            "Could not find 'ollama'. Install Ollama and ensure it is on PATH."
-        ) from e
-
-    if not _wait_for_server(proc):
-        proc.terminate()
-        raise RuntimeError("Ollama server failed to start")
-    return proc
-
-
-def _stop_server(proc: subprocess.Popen) -> None:
-    """Terminate the ``ollama serve`` process."""
-
-    try:
-        proc.terminate()
-        proc.wait(timeout=10)
-    except Exception:
-        try:
-            proc.kill()
-        except Exception:
-            pass
-
-
-def _stop_model() -> None:
-    """Best-effort attempt to unload the model from the Ollama server."""
-
-    try:
-        requests.post(
-            f"{API_URL.rstrip('/')}/api/stop", json={"model": LLM_NAME}, timeout=5
-        )
-    except Exception:
-        pass
-
-
-# ---------------------------------------------------------------------------
-# Text generation utilities
-# ---------------------------------------------------------------------------
-
-def _gen_question(passage: str) -> str:
+def _gen_question(passage: str, tok: AutoTokenizer, llm: AutoModelForCausalLM) -> str:
     sys = (
         "You are a helpful travel assistant. Read the PASSAGE and invent one "
         "concise, natural-sounding traveler question that could be answered "
         "by the same passage. Return ONLY the question text."
     )
-    prompt = f"{sys}\nPASSAGE:\n'''{passage}'''"
-    q = _ollama_generate(prompt)
+    prompt = f"<s>[INST] <<SYS>>\n{sys}\n<</SYS>>\n\nPASSAGE:\n'''{passage}'''\n[/INST]"
+    ids = tok(prompt, return_tensors="pt").to(llm.device)
+    with torch.no_grad():
+        out = llm.generate(**ids, max_new_tokens=40, pad_token_id=tok.eos_token_id)[0]
+    q = tok.decode(out[ids.input_ids.shape[-1] :], skip_special_tokens=True).strip()
     return q if q.endswith("?") else q + "?"
 
 
-def _gen_context(question: str, answer_part: str) -> str:
-    """Generate a short context passage supporting ``answer_part``."""
+def _gen_context(
+    question: str, answer_part: str, tok: AutoTokenizer, llm: AutoModelForCausalLM
+) -> str:
+    """Generate a short context passage supporting *answer_part* for *question*.
+
+    The language model samples a 2–3 sentence block that helps address the
+    portion of the answer specified by ``answer_part``. Sampling is enabled so
+    repeated calls yield varied passages.
+    """
 
     sys = (
         "You are a helpful travel assistant. Invent a short context passage of "
@@ -150,10 +58,21 @@ def _gen_context(question: str, answer_part: str) -> str:
         "ANSWER_SNIPPET. Do not answer the question directly."
     )
     prompt = (
-        f"{sys}\nQUESTION: {question}\nANSWER_SNIPPET: {answer_part}"
+        f"<s>[INST] <<SYS>>\n{sys}\n<</SYS>>\n\nQUESTION: {question}\n"
+        f"ANSWER_SNIPPET: {answer_part}\n[/INST]"
     )
+    ids = tok(prompt, return_tensors="pt").to(llm.device)
     for _ in range(3):
-        ctx = _ollama_generate(prompt)
+        with torch.no_grad():
+            out = llm.generate(
+                **ids,
+                max_new_tokens=80,
+                pad_token_id=tok.eos_token_id,
+                do_sample=True,
+                temperature=0.7,
+                top_p=0.9,
+            )[0]
+        ctx = tok.decode(out[ids.input_ids.shape[-1] :], skip_special_tokens=True).strip()
         sentences = re.findall(r"[^.!?]+[.!?]", ctx)
         if len(sentences) >= 2:
             keep = min(len(sentences), random.choice([2, 3]))
@@ -162,7 +81,12 @@ def _gen_context(question: str, answer_part: str) -> str:
 
 
 def _choose_num_ctx(max_ctx: int) -> int:
-    """Sample how many context snippets to include for a question."""
+    """Sample how many context snippets to include for a question.
+
+    The count follows a normal distribution centered at 2.5 and is
+    clamped to the inclusive range [0, 5] as well as the provided
+    ``max_ctx`` limit.
+    """
 
     num = round(random.gauss(2.5, 1))
     num = max(0, min(5, num))
@@ -174,68 +98,82 @@ BOILER_PAT = re.compile(
 )
 
 
-# ---------------------------------------------------------------------------
-# Main entry point
-# ---------------------------------------------------------------------------
-
 def build_auto_dataset() -> None:
     if AUTO_QA_JL.exists():
         print(f"{AUTO_QA_JL} exists; skipping dataset build")
         return
 
+    hf_token = os.getenv("VGJ_HF_TOKEN")
+    if hf_token:
+        login(token=hf_token)
+
+    tok = AutoTokenizer.from_pretrained(
+        LLM_NAME, use_fast=True, token=hf_token, cache_dir=MODEL_CACHE
+    )
+    tok.add_special_tokens(SPECIAL_TOKENS)
+    if torch.cuda.is_available():
+        quant_cfg = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_use_double_quant=True,
+        )
+        llm = AutoModelForCausalLM.from_pretrained(
+            LLM_NAME,
+            quantization_config=quant_cfg,
+            torch_dtype=torch.float16,
+            device_map={"": 0},
+            token=hf_token,
+            cache_dir=MODEL_CACHE,
+        )
+    else:
+        llm = AutoModelForCausalLM.from_pretrained(
+            LLM_NAME,
+            torch_dtype=torch.float32,
+            token=hf_token,
+            cache_dir=MODEL_CACHE,
+        )
+
+    llm.resize_token_embeddings(len(tok))
+
     AUTO_QA_JL.parent.mkdir(parents=True, exist_ok=True)
-    server = _start_server()
-    auto_examples: list[dict[str, str]] = []
+    auto_examples = []
     skipped = 0
-    try:
-        for txt_f in tqdm(sorted(TXT_DIR.glob("*.txt")), desc="auto-QA", unit="page"):
-            html = (RAW_HTML_DIR / f"{txt_f.stem}.html").read_text()
-            text = trafilatura.extract(html) or ""
-            paras = [p.strip() for p in text.splitlines() if len(p.split()) > 25][:PARA_MAX]
-            if not paras:
-                continue
-            passage = "\n\n".join(paras)
-            question = _gen_question(passage)
-            words, answer_words, used_paras = 0, [], []
-            for p in paras:
-                if words + len(p.split()) > ANSWER_TOK_CAP:
-                    break
-                answer_words.extend(p.split())
-                words += len(p.split())
-                used_paras.append(p)
-            answer = " ".join(answer_words) or paras[0]
-            if BOILER_PAT.search(answer):
-                skipped += 1
-                continue
-            available_parts = used_paras
-            ctx_blocks: list[str] = []
-            if available_parts:
-                max_ctx = min(len(available_parts), CTX_MAX)
-                num_ctx = _choose_num_ctx(max_ctx)
-                if num_ctx:
-                    ctx_parts = random.sample(available_parts, k=num_ctx)
-                    for part in ctx_parts:
-                        ctx_blocks.append(
-                            f"<CONTEXT>\n{_gen_context(question, part)}\n</CONTEXT>"
-                        )
-                    random.shuffle(ctx_blocks)
-            ctx_str = "\n\n".join(ctx_blocks)
-            prompt = f"{ctx_str}\n\n{question}" if ctx_blocks else question
-            auto_examples.append({"input": prompt, "output": answer})
-        with AUTO_QA_JL.open("w") as f:
-            for ex in auto_examples:
-                f.write(json.dumps(ex) + "\n")
-        print(f"Generated {len(auto_examples):,} clean pairs → {AUTO_QA_JL}")
-    finally:
-        # Ensure the model is unloaded and server stopped even if generation fails.
-        _stop_model()
-        _stop_server(server)
-
-
-__all__ = [
-    "build_auto_dataset",
-    "_gen_question",
-    "_gen_context",
-    "_choose_num_ctx",
-]
-
+    for txt_f in tqdm(sorted(TXT_DIR.glob("*.txt")), desc="auto-QA", unit="page"):
+        html = (RAW_HTML_DIR / f"{txt_f.stem}.html").read_text()
+        text = trafilatura.extract(html) or ""
+        paras = [p.strip() for p in text.splitlines() if len(p.split()) > 25][:PARA_MAX]
+        if not paras:
+            continue
+        passage = "\n\n".join(paras)
+        question = _gen_question(passage, tok, llm)
+        words, answer_words, used_paras = 0, [], []
+        for p in paras:
+            if words + len(p.split()) > ANSWER_TOK_CAP:
+                break
+            answer_words.extend(p.split())
+            words += len(p.split())
+            used_paras.append(p)
+        answer = " ".join(answer_words) or paras[0]
+        if BOILER_PAT.search(answer):
+            skipped += 1
+            continue
+        available_parts = used_paras
+        ctx_blocks: list[str] = []
+        if available_parts:
+            max_ctx = min(len(available_parts), CTX_MAX)
+            num_ctx = _choose_num_ctx(max_ctx)
+            if num_ctx:
+                ctx_parts = random.sample(available_parts, k=num_ctx)
+                for part in ctx_parts:
+                    ctx_blocks.append(
+                        f"<CONTEXT>\n{_gen_context(question, part, tok, llm)}\n</CONTEXT>"
+                    )
+                random.shuffle(ctx_blocks)
+        ctx_str = "\n\n".join(ctx_blocks)
+        prompt = f"{ctx_str}\n\n{question}" if ctx_blocks else question
+        auto_examples.append({"input": prompt, "output": answer})
+    with AUTO_QA_JL.open("w") as f:
+        for ex in auto_examples:
+            f.write(json.dumps(ex) + "\n")
+    print(f"Generated {len(auto_examples):,} clean pairs → {AUTO_QA_JL}")
