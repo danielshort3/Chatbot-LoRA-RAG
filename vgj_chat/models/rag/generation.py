@@ -5,79 +5,63 @@ from typing import List, Tuple
 import torch  # type: ignore
 
 from . import boot as _boot
-from .boot import logger
 from .retrieval import retrieve_unique
 
 system_prompt = (
-    """You are a friendly travel expert representing Visit Grand Junction.
-Use the supplied context excerpts to answer questions about Grand Junction, Colorado and its surroundings in a warm, adventurous tone that highlights outdoor recreation, local culture, and natural beauty.
-Only discuss Grand Junction, Colorado. If asked about other destinations, prices, or deals, politely explain that you can only talk about Grand Junction.
-Cite or reference the context when relevant.
-If the context does not contain the needed information, say you don’t know and recommend checking official Visit Grand Junction resources."""
+    "You are a friendly travel expert representing Visit Grand Junction.\n"
+    "Use the supplied context excerpts to answer questions about Grand Junction, Colorado and its surroundings in a warm, adventurous tone that highlights outdoor recreation, local culture, and natural beauty.\n"
+    "Only discuss Grand Junction, Colorado. If asked about other destinations, prices, or deals, politely explain that you can only talk about Grand Junction.\n"
+    "Cite or reference the context when relevant.\n"
+    "If the context does not contain the needed information, say you don’t know and recommend checking official Visit Grand Junction resources."
 )
 
-# ───────────────────────────────────
-# 🔧 helper: build the shared prompt
-# ───────────────────────────────────
-def _make_prompt(question: str,
-                 passages: List[Tuple[float, str, str]]) -> str:
-    src_block = "\n\n".join(
-        f"[{i+1}] {url}\n{text}"
-        for i, (_score, text, url) in enumerate(passages)
-    )
-    return (
-        "Answer the *single* question below using only the listed sources. "
-        "Do not add additional questions, FAQs, or headings. "
-        "Begin your answer with 'This portfolio project was created by Daniel Short. "
-        "Views expressed do not represent Visit Grand Junction or the City of Grand Junction.' "
-        "Limit your answer to one or two short paragraphs. "
-        "Cite each fact like [1].\n\n"
-        f"{src_block}\n\nQ: {question}\nA:"
-    )
+
+def _build_messages(question: str, passages: List[Tuple[float, str, str]]):
+    context_parts: list[str] = []
+    sources: list[str] = []
+    for i, (_score, text, url) in enumerate(passages, 1):
+        context_parts.append(f"[{i}] {text}\nURL: {url}")
+        sources.append(url)
+    context = "\n\n".join(context_parts)
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"{context}\n\nQuestion: {question}"},
+    ]
+    return messages, sources
 
 
-# ───────────────────────────────────
-# 🌐 public API
-# ───────────────────────────────────
-def chat(question: str) -> str:
-    """Return a fully-formed, citation-rich answer string."""
+def chat(question: str):
+    """Return an answer string and accompanying sources."""
     _boot._ensure_boot()
     assert _boot.CHAT and _boot.EMBEDDER
 
     with _boot._STATE_LOCK:
         passages = retrieve_unique(question)
         if not passages:
-            return "Sorry, I couldn’t find anything relevant."
+            return {"answer": "Sorry, I couldn’t find anything relevant.", "sources": []}
 
-        prompt = _make_prompt(question, passages)
+        messages, sources = _build_messages(question, passages)
 
         tok = _boot.CHAT.tokenizer
         model = _boot.CHAT.model
 
-        inputs = tok(prompt, return_tensors="pt").to(model.device)
-        if "attention_mask" not in inputs:
-            inputs["attention_mask"] = torch.ones_like(inputs["input_ids"])
+        inputs = tok.apply_chat_template(
+            messages, return_tensors="pt", add_generation_prompt=True
+        ).to(model.device)
+        n_prompt = inputs.shape[1]
+        max_new = min(_boot.CFG.max_new_tokens, model.config.max_position_embeddings - n_prompt)
 
         generated = model.generate(
-            **inputs,
-            max_new_tokens=_boot.CFG.max_new_tokens,
+            input_ids=inputs,
+            max_new_tokens=max_new,
             do_sample=False,
         )
 
-        answer = tok.decode(generated[0], skip_special_tokens=True)[len(prompt):].strip()
+        answer = tok.decode(
+            generated[0][n_prompt:], skip_special_tokens=True
+        ).strip()
 
-    sources_md = "\n".join(
-        f"[{i+1}] {url}" for i, (_s, _t, url) in enumerate(passages)
-    )
-    return f"{answer}\n\n**Sources**\n{sources_md}"
-
-
-# backwards-compat alias; drop if unused
-run_enhanced = chat
+    return {"answer": answer, "sources": sources}
 
 
-def answer_stream(question: str):
-    """Yield a single answer for compatibility with older APIs."""
-    yield chat(question)
-
-__all__ = ["chat", "run_enhanced", "answer_stream"]
+__all__ = ["chat"]

@@ -54,31 +54,33 @@ def predict_fn(data, ctx):
         raise ValueError(
             f"Embedding dimension {emb_query.shape[0]} does not match index dimension {mdl['index'].d}"
         )
+
     _distances, indices = mdl["index"].search(emb_query.reshape(1, -1), top_k)
-    context_parts = []
+    context_parts: list[str] = []
     sources: list[str] = []
-    for idx in indices[0]:
+    for i, idx in enumerate(indices[0], 1):
         meta = mdl["meta"][idx]
         src = meta.get("source") or meta.get("url") or "unknown"
         text = meta.get("text")
         if text:
-            context_parts.append(f"<CONTEXT>{src}: {text}</CONTEXT>")
+            context_parts.append(f"[{i}] {text}\nURL: {src}")
         if src not in sources:
             sources.append(src)
-    context = "\n".join(context_parts)
+    context = "\n\n".join(context_parts)
+
+    system_prompt = (
+        "You are a friendly travel expert representing Visit Grand Junction.\n"
+        "Use the supplied context excerpts to answer questions about Grand Junction, Colorado and its surroundings in a warm, adventurous tone that highlights outdoor recreation, local culture, and natural beauty.\n"
+        "Only discuss Grand Junction, Colorado. If asked about other destinations, prices, or deals, politely explain that you can only talk about Grand Junction.\n"
+        "Cite or reference the context when relevant.\n"
+        "If the context does not contain the needed information, say you don’t know and recommend checking official Visit Grand Junction resources."
+    )
 
     messages = [
-        {
-            "role": "system",
-            "content": (
-                "You are a friendly travel expert representing Visit Grand Junction. "
-                "Only discuss attractions in Grand Junction, Colorado. "
-                "If asked about other destinations, prices, or deals, politely state that you can only "
-                "talk about Grand Junction. Limit your response to one or two short paragraphs."
-            ),
-        },
-        {"role": "user", "content": f"{context}\n\n{prompt}"},
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"{context}\n\nQuestion: {prompt}"},
     ]
+
     device = mdl["device"]
     input_ids = (
         mdl["tok"]
@@ -86,9 +88,10 @@ def predict_fn(data, ctx):
         .to(device)
     )
     n_prompt = input_ids.shape[1]
+    max_new = min(CFG.max_new_tokens, mdl["lm"].config.max_position_embeddings - n_prompt)
     gen_ids = mdl["lm"].generate(
         input_ids=input_ids,
-        max_new_tokens=CFG.max_new_tokens,
+        max_new_tokens=max_new,
         temperature=0.2,
         eos_token_id=mdl["tok"].eos_token_id,
         pad_token_id=mdl["tok"].eos_token_id,
@@ -105,10 +108,7 @@ def predict_fn(data, ctx):
         "or the City of Grand Junction.\n\n"
     )
 
-    src_text = ", ".join(sources)
     generated = DISCLAIMER + answer_text
-    if src_text:
-        generated += f"\n\nSources: {src_text}"
 
     return {
         "generated_text": generated,

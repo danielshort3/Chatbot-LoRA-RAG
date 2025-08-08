@@ -3,24 +3,9 @@
 import sys
 import types
 
-from . import baseline as _baseline
 from . import boot as _boot_mod
-from .generation import answer_stream, chat, run_enhanced
+from .generation import chat
 from .retrieval import SentenceWindowRetriever, retrieve_unique, retrieve_windows
-
-_baseline_mode = _baseline._baseline_mode
-
-
-def run_baseline(question: str) -> str:
-    with _baseline_mode():
-        assert _boot_mod.CHAT
-        generated = _boot_mod.CHAT(
-            question,
-            do_sample=True,
-            temperature=0.8,
-            max_new_tokens=_boot_mod.CFG.max_new_tokens,
-        )[0]["generated_text"]
-    return generated.strip()
 
 
 class _RagModule(types.ModuleType):
@@ -43,9 +28,5 @@ __all__ = [
     "retrieve_unique",
     "retrieve_windows",
     "SentenceWindowRetriever",
-    "answer_stream",
     "chat",
-    "run_enhanced",
-    "run_baseline",
-    "_baseline_mode",
 ]

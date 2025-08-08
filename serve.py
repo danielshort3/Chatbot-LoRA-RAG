@@ -53,28 +53,28 @@ def invoke(p: Prompt):
         )
     _, ids = INDEX.search(query_emb.reshape(1, -1), 5)
     hits = [METADATA[i] for i in ids[0]]
-    context_parts = []
+    context_parts: list[str] = []
     sources: list[str] = []
-    for h in hits:
+    for i, h in enumerate(hits, 1):
         src = h.get("source") or h.get("url") or "unknown"
         text = h.get("text")
         if text:
-            context_parts.append(f"<CONTEXT>{src}: {text}</CONTEXT>")
+            context_parts.append(f"[{i}] {text}\nURL: {src}")
         if src not in sources:
             sources.append(src)
-    context = "\n".join(context_parts)
+    context = "\n\n".join(context_parts)
+
+    system_prompt = (
+        "You are a friendly travel expert representing Visit Grand Junction.\n"
+        "Use the supplied context excerpts to answer questions about Grand Junction, Colorado and its surroundings in a warm, adventurous tone that highlights outdoor recreation, local culture, and natural beauty.\n"
+        "Only discuss Grand Junction, Colorado. If asked about other destinations, prices, or deals, politely explain that you can only talk about Grand Junction.\n"
+        "Cite or reference the context when relevant.\n"
+        "If the context does not contain the needed information, say you don’t know and recommend checking official Visit Grand Junction resources."
+    )
 
     messages = [
-        {
-            "role": "system",
-            "content": (
-                "You are a friendly travel expert representing Visit Grand Junction. "
-                "Only discuss attractions in Grand Junction, Colorado. "
-                "If asked about other destinations, prices, or deals, politely state that you can only "
-                "talk about Grand Junction. Limit your response to one or two short paragraphs."
-            ),
-        },
-        {"role": "user", "content": f"{context}\n\n{p.inputs}"},
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"{context}\n\nQuestion: {p.inputs}"},
     ]
 
     # --- tokenise prompt ---------------------------------------------------
@@ -84,9 +84,10 @@ def invoke(p: Prompt):
     n_prompt = input_ids.shape[1]  # prompt token count
 
     # --- generate ----------------------------------------------------------
+    max_new = min(CFG.max_new_tokens, MODEL.config.max_position_embeddings - n_prompt)
     output = MODEL.generate(
         input_ids=input_ids,
-        max_new_tokens=CFG.max_new_tokens,
+        max_new_tokens=max_new,
         temperature=0.2,  # keeps it concise
         eos_token_id=TOKENIZER.eos_token_id,
         pad_token_id=TOKENIZER.eos_token_id,
@@ -109,10 +110,7 @@ def invoke(p: Prompt):
         output[0][n_prompt:], skip_special_tokens=True
     ).strip()
 
-    src_text = ", ".join(sources)
     generated = DISCLAIMER + answer_text
-    if src_text:
-        generated += f"\n\nSources: {src_text}"
 
     return {
         "generated_text": generated,
