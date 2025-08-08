@@ -5,74 +5,61 @@ import types
 
 from types import ModuleType
 
-import pytest
-
 
 def _load_dataset(monkeypatch, text: str):
-    """Reload dataset with requests stubbed to return ``text``."""
+    """Reload dataset with heavy dependencies stubbed and return module and stubs."""
 
-    class DummyResp:
-        def raise_for_status(self):
+    class _DummyNoGrad:
+        def __enter__(self):
             return None
 
-        def json(self):
-            return {"response": text}
+        def __exit__(self, exc_type, exc, tb):
+            return False
 
-    requests_stub = types.SimpleNamespace(
-        post=lambda url, json, timeout=None: DummyResp(),
-        get=lambda url, timeout=None: DummyResp(),
+    torch_stub = types.SimpleNamespace(
+        no_grad=lambda: _DummyNoGrad(),
+        cuda=types.SimpleNamespace(is_available=lambda: False),
+        float16="float16",
+        float32="float32",
     )
-    monkeypatch.setitem(sys.modules, "requests", requests_stub)
+    monkeypatch.setitem(sys.modules, "torch", torch_stub)
     monkeypatch.setitem(sys.modules, "trafilatura", ModuleType("trafilatura"))
 
     dataset = importlib.reload(importlib.import_module("vgj_chat.data.dataset"))
-    return dataset
 
+    class DummyTensor(list):
+        @property
+        def shape(self):
+            return (len(self),)
 
-def test_build_auto_dataset_starts_server(monkeypatch, tmp_path):
-    dataset = _load_dataset(monkeypatch, "text")
+    class DummyInput(dict):
+        def __init__(self):
+            super().__init__({"input_ids": DummyTensor([1, 2, 3])})
+            self.input_ids = self["input_ids"]
 
-    calls = {"popen": 0, "stop": 0, "terminate": 0}
+        def to(self, device):
+            return self
 
-    class DummyProc:
-        def poll(self):
-            return None
+    class DummyTokenizer:
+        def __init__(self, text: str):
+            self.text = text
+            self.eos_token_id = 0
 
-        def terminate(self):
-            calls["terminate"] += 1
+        def __call__(self, prompt, return_tensors=None):
+            return DummyInput()
 
-        def wait(self, timeout=None):
-            return None
+        def decode(self, ids, skip_special_tokens=True):
+            return self.text
 
-    def popen(cmd, stdout=None, stderr=None):
-        calls["popen"] += 1
-        return DummyProc()
+    class DummyLLM:
+        device = "cpu"
 
-    monkeypatch.setattr(dataset.subprocess, "Popen", popen)
-    monkeypatch.setattr(dataset, "_wait_for_server", lambda proc: True)
-    monkeypatch.setattr(dataset, "_stop_model", lambda: calls.__setitem__("stop", calls["stop"] + 1))
+        def generate(self, **kwargs):
+            return [DummyTensor([0, 1, 2, 3, 4])]
 
-    monkeypatch.setattr(dataset, "TXT_DIR", tmp_path)
-    monkeypatch.setattr(dataset, "RAW_HTML_DIR", tmp_path)
-    monkeypatch.setattr(dataset, "AUTO_QA_JL", tmp_path / "out.jsonl")
-
-    dataset.build_auto_dataset()
-
-    assert calls["popen"] == 1
-    assert calls["terminate"] == 1
-    assert calls["stop"] == 1
-
-
-def test_start_server_missing_binary(monkeypatch):
-    dataset = _load_dataset(monkeypatch, "text")
-
-    def popen(cmd, stdout=None, stderr=None):
-        raise FileNotFoundError
-
-    monkeypatch.setattr(dataset.subprocess, "Popen", popen)
-
-    with pytest.raises(FileNotFoundError):
-        dataset._start_server()
+    tok = DummyTokenizer(text)
+    llm = DummyLLM()
+    return dataset, tok, llm
 
 
 def test_gen_context_returns_complete_sentences(monkeypatch):
@@ -81,9 +68,9 @@ def test_gen_context_returns_complete_sentences(monkeypatch):
         "This is another complete sentence. "
         "This final sentence is cut off"
     )
-    dataset = _load_dataset(monkeypatch, incomplete_text)
+    dataset, tok, llm = _load_dataset(monkeypatch, incomplete_text)
 
-    ctx = dataset._gen_context("question", "answer")
+    ctx = dataset._gen_context("question", "answer", tok, llm)
 
     assert ctx.endswith((".", "!", "?")), "Context should end with punctuation"
     sentences = re.findall(r"[^.!?]+[.!?]", ctx)
@@ -95,9 +82,9 @@ def test_gen_context_returns_complete_sentences(monkeypatch):
 
 def test_gen_context_single_sentence(monkeypatch):
     single_sentence = "Only one complete sentence here."
-    dataset = _load_dataset(monkeypatch, single_sentence)
+    dataset, tok, llm = _load_dataset(monkeypatch, single_sentence)
 
-    ctx = dataset._gen_context("question", "answer")
+    ctx = dataset._gen_context("question", "answer", tok, llm)
 
     assert ctx.endswith((".", "!", "?"))
     assert ctx == single_sentence
@@ -106,7 +93,7 @@ def test_gen_context_single_sentence(monkeypatch):
 
 
 def test_choose_num_ctx_clamped(monkeypatch):
-    dataset = _load_dataset(monkeypatch, "text")
+    dataset, _, _ = _load_dataset(monkeypatch, "text")
 
     monkeypatch.setattr(dataset.random, "gauss", lambda mu, sig: 10)
     assert dataset._choose_num_ctx(5) == 5
