@@ -13,6 +13,7 @@ from pathlib import Path
 import requests
 import trafilatura
 from tqdm.auto import tqdm
+from ..utils.text import token_len
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -293,11 +294,11 @@ def build_auto_dataset() -> None:
     server = _start_server()
     _ensure_model()
     generated = 0
+    long_outputs = 0
     try:
         with AUTO_QA_JL.open("a") as f:
             for paras in tqdm(passages[start_idx:], desc="auto-QA", unit="page"):
                 passage = "\n\n".join(paras)
-                question = _gen_question(passage)
                 words, answer_words, used_paras = 0, [], []
                 for p in paras:
                     if words + len(p.split()) > ANSWER_TOK_CAP:
@@ -306,6 +307,10 @@ def build_auto_dataset() -> None:
                     words += len(p.split())
                     used_paras.append(p)
                 answer = " ".join(answer_words) or paras[0]
+                if token_len(answer) > 512:
+                    long_outputs += 1
+                    continue
+                question = _gen_question(passage)
                 available_parts = used_paras
                 ctx_blocks: list[str] = []
                 if available_parts:
@@ -323,7 +328,8 @@ def build_auto_dataset() -> None:
                 f.write(json.dumps({"input": prompt, "output": answer}) + "\n")
                 generated += 1
         print(
-            f"Generated {generated:,} new pairs → {AUTO_QA_JL}; skipped {skipped} passages",
+            f"Generated {generated:,} new pairs → {AUTO_QA_JL}; skipped {skipped} passages; "
+            f"{long_outputs} outputs over 512 tokens",
         )
     finally:
         # Ensure the model is unloaded and server stopped even if generation fails.
