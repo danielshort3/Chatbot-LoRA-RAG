@@ -231,7 +231,7 @@ def build_auto_dataset() -> None:
     txt_files = sorted(TXT_DIR.glob("*.txt"))
 
     start_idx = 0
-    auto_examples: list[dict[str, str]] = []
+    valid_examples: list[dict[str, str]] = []
 
     if AUTO_QA_JL.exists():
         try:
@@ -240,21 +240,24 @@ def build_auto_dataset() -> None:
             lines = []
         for line in lines:
             try:
-                auto_examples.append(json.loads(line))
+                valid_examples.append(json.loads(line))
             except json.JSONDecodeError:
                 break
-        qa_count = len(auto_examples)
+        qa_count = len(valid_examples)
         if qa_count >= len(txt_files) and qa_count > 0:
             print(
-                f"{AUTO_QA_JL} exists with {qa_count} pairs; skipping dataset build"
+                f"{AUTO_QA_JL} exists with {qa_count} pairs; skipping dataset build",
             )
             return
         if qa_count:
             # drop the last entry to ensure it is regenerated
-            auto_examples = auto_examples[:-1]
-            start_idx = len(auto_examples)
+            valid_examples = valid_examples[:-1]
+            start_idx = len(valid_examples)
+            with AUTO_QA_JL.open("w") as f:
+                for ex in valid_examples:
+                    f.write(json.dumps(ex) + "\n")
         print(
-            f"{AUTO_QA_JL} incomplete ({qa_count}/{len(txt_files)}); resuming dataset build"
+            f"{AUTO_QA_JL} incomplete ({qa_count}/{len(txt_files)}); resuming dataset build",
         )
 
     AUTO_QA_JL.parent.mkdir(parents=True, exist_ok=True)
@@ -262,47 +265,46 @@ def build_auto_dataset() -> None:
     server = _start_server()
     _ensure_model()
     skipped = 0
+    generated = 0
     try:
-        for txt_f in tqdm(txt_files[start_idx:], desc="auto-QA", unit="page"):
-            html = (RAW_HTML_DIR / f"{txt_f.stem}.html").read_text()
-            text = trafilatura.extract(html) or ""
-            paras = [p.strip() for p in text.splitlines() if len(p.split()) > 25][:PARA_MAX]
-            if not paras:
-                continue
-            passage = "\n\n".join(paras)
-            question = _gen_question(passage)
-            words, answer_words, used_paras = 0, [], []
-            for p in paras:
-                if words + len(p.split()) > ANSWER_TOK_CAP:
-                    break
-                answer_words.extend(p.split())
-                words += len(p.split())
-                used_paras.append(p)
-            answer = " ".join(answer_words) or paras[0]
-            if BOILER_PAT.search(answer):
-                skipped += 1
-                continue
-            available_parts = used_paras
-            ctx_blocks: list[str] = []
-            if available_parts:
-                max_ctx = min(len(available_parts), CTX_MAX)
-                num_ctx = _choose_num_ctx(max_ctx)
-                if num_ctx:
-                    ctx_parts = random.sample(available_parts, k=num_ctx)
-                    for part in ctx_parts:
-                        ctx_blocks.append(
-                            f"<CONTEXT>\n{_gen_context(question, part)}\n</CONTEXT>"
-                        )
-                    random.shuffle(ctx_blocks)
-            ctx_str = "\n\n".join(ctx_blocks)
-            prompt = f"{ctx_str}\n\n{question}" if ctx_blocks else question
-            auto_examples.append({"input": prompt, "output": answer})
-        with AUTO_QA_JL.open("w") as f:
-            for ex in auto_examples:
-                f.write(json.dumps(ex) + "\n")
+        with AUTO_QA_JL.open("a") as f:
+            for txt_f in tqdm(txt_files[start_idx:], desc="auto-QA", unit="page"):
+                html = (RAW_HTML_DIR / f"{txt_f.stem}.html").read_text()
+                text = trafilatura.extract(html) or ""
+                paras = [p.strip() for p in text.splitlines() if len(p.split()) > 25][:PARA_MAX]
+                if not paras:
+                    continue
+                passage = "\n\n".join(paras)
+                question = _gen_question(passage)
+                words, answer_words, used_paras = 0, [], []
+                for p in paras:
+                    if words + len(p.split()) > ANSWER_TOK_CAP:
+                        break
+                    answer_words.extend(p.split())
+                    words += len(p.split())
+                    used_paras.append(p)
+                answer = " ".join(answer_words) or paras[0]
+                if BOILER_PAT.search(answer):
+                    skipped += 1
+                    continue
+                available_parts = used_paras
+                ctx_blocks: list[str] = []
+                if available_parts:
+                    max_ctx = min(len(available_parts), CTX_MAX)
+                    num_ctx = _choose_num_ctx(max_ctx)
+                    if num_ctx:
+                        ctx_parts = random.sample(available_parts, k=num_ctx)
+                        for part in ctx_parts:
+                            ctx_blocks.append(
+                                f"<CONTEXT>\n{_gen_context(question, part)}\n</CONTEXT>",
+                            )
+                        random.shuffle(ctx_blocks)
+                ctx_str = "\n\n".join(ctx_blocks)
+                prompt = f"{ctx_str}\n\n{question}" if ctx_blocks else question
+                f.write(json.dumps({"input": prompt, "output": answer}) + "\n")
+                generated += 1
         print(
-            f"Generated {len(auto_examples):,} clean pairs → {AUTO_QA_JL}; "
-            f"skipped {skipped} passages"
+            f"Generated {generated:,} new pairs → {AUTO_QA_JL}; skipped {skipped} passages",
         )
     finally:
         # Ensure the model is unloaded and server stopped even if generation fails.
