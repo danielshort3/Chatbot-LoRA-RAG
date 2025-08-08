@@ -1,12 +1,12 @@
 """LoRA/QLoRA fine‑tuning helper.
 
 This script follows the recommended recipe for adapting
-``mistralai/Mistral-7B-Instruct-v0.2`` into the Visit Grand Junction
-travel‑agent model.  It mirrors the steps described in the rough guide:
+``openai/gpt-oss-20b`` into the Visit Grand Junction travel‑agent model. It
+mirrors the steps described in the rough guide:
 
-* load the Mistral tokenizer without the fast backend and register
-  optional special tokens (``<CONTEXT>``, ``</CONTEXT>``) that can be used
-  when injecting retrieved chunks during RAG inference;
+* load the gpt‑oss tokenizer and register optional special tokens
+  (``<CONTEXT>``, ``</CONTEXT>``) that can be used when injecting retrieved
+  chunks during RAG inference;
 * quantise the base model to 4‑bit weights and apply a LoRA adapter to
   the major linear layers (``q_proj``, ``k_proj``, ``v_proj``, ``o_proj``,
   ``gate_proj``, ``up_proj`` and ``down_proj``) with rank 16 and zero
@@ -36,15 +36,17 @@ from transformers import (
 try:  # transformers is stubbed in tests
     from transformers import TrainerCallback
 except Exception:  # pragma: no cover – fallback for minimal stubs
+
     class TrainerCallback:  # type: ignore
         pass
 
-from trl import SFTTrainer, SFTConfig  # NEW import
+
+from trl import SFTConfig, SFTTrainer  # NEW import
 
 # --------------------------------------------------------------------------- #
 # Constants
 # --------------------------------------------------------------------------- #
-BASE_MODEL = "mistralai/Mistral-7B-Instruct-v0.2"
+BASE_MODEL = "openai/gpt-oss-20b"
 # dataset built by ``vgj_chat.data.dataset.build_auto_dataset`` – Q&A pairs
 AUTO_QA_JL = Path("data/dataset/vgj_auto_dataset.jsonl")
 CHECKPOINT_DIR = Path("data/lora-vgj-checkpoint")
@@ -231,7 +233,7 @@ def run_finetune() -> None:
     # ----------------------- SFT config (key fix) ------------------------- #
     sft_cfg = SFTConfig(
         completion_only_loss=False,  # disable so formatter is allowed
-        dataset_text_field=None,     # let trainer use formatter output
+        dataset_text_field=None,  # let trainer use formatter output
     )
 
     # ----------------------- trainer -------------------------------------- #
@@ -241,7 +243,7 @@ def run_finetune() -> None:
         train_dataset=train_set,
         eval_dataset=eval_set,
         formatting_func=format_example,
-        config=sft_cfg,              # NEW
+        config=sft_cfg,  # NEW
         callbacks=[
             EarlyStoppingCallback(
                 early_stopping_patience=PATIENCE, early_stopping_threshold=0.0

@@ -1,6 +1,6 @@
 # Chatbot-LoRa-RAG
 
-A lightweight Retrieval-Augmented Generation (RAG) demo that fine‑tunes a language model with LoRA, merges the adapter into a 4‑bit Mistral‑7B model and exposes a FastAPI endpoint for inference. The code lives in the `vgj_chat` package and includes helper scripts for crawling pages, building an index and training or merging the adapter.
+A lightweight Retrieval-Augmented Generation (RAG) demo that fine‑tunes a language model with LoRA, merges the adapter into a 4‑bit gpt‑oss‑20B model and exposes a FastAPI endpoint for inference. The code lives in the `vgj_chat` package and includes helper scripts for crawling pages, building an index and training or merging the adapter.
 
 ## Installation
 
