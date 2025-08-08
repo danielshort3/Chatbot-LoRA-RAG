@@ -119,6 +119,7 @@ def main() -> None:
         steps.append(["python", "scripts/merge_lora.py"])
 
     for cmd in steps:
+        print(f"Running {' '.join(cmd)}")
         subprocess.run(cmd, check=True)
 
     # ---------- NEW FILE-GATHERING LOGIC ----------
