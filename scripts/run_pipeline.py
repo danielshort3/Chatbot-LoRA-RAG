@@ -103,8 +103,17 @@ def main() -> None:
     else:
         steps.append(["python", "scripts/build_index.py"])
 
+    txt_files = list(CRAWL_TXT_DIR.glob("*.txt"))
     if AUTO_QA_JL.exists():
-        print(f"{AUTO_QA_JL} exists; skipping dataset build")
+        try:
+            with AUTO_QA_JL.open() as f:
+                qa_count = sum(1 for _ in f)
+        except OSError:
+            qa_count = -1
+    else:
+        qa_count = -1
+    if qa_count >= len(txt_files) and qa_count != -1:
+        print(f"{AUTO_QA_JL} exists with {qa_count} pairs; skipping dataset build")
     else:
         steps.append(["python", "scripts/build_dataset.py"])
 
