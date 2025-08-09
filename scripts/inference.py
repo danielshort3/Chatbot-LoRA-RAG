@@ -12,6 +12,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 from vgj_chat.config import CFG
+from vgj_chat.utils.text import strip_metadata
 
 CACHE_DIR = Path(os.environ.get("TRANSFORMERS_CACHE", "/tmp/hf_cache"))
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -55,7 +56,7 @@ If you are unsure or lack information, say so and suggest checking official Visi
 def predict_fn(data, ctx):
     mdl = ctx
     prompt = data["inputs"].strip()
-    top_k = data.get("top_k", 3)
+    top_k = data.get("top_k", CFG.top_k)
 
     # --- retrieve ---
     emb_query = mdl["encoder"].encode(prompt, normalize_embeddings=True)
@@ -108,13 +109,16 @@ def predict_fn(data, ctx):
 
     n_total = gen_ids.shape[1]
     n_answer = n_total - n_prompt
-    answer_text = tok.decode(gen_ids[0][n_prompt:], skip_special_tokens=True).strip()
+    answer_text = strip_metadata(
+        tok.decode(gen_ids[0][n_prompt:], skip_special_tokens=True).strip()
+    )
 
     DISCLAIMER = (
         "⚠️  Portfolio demo only. "
-        "Opinions are Daniel Short’s and do **not** represent Visit Grand Junction "
+        "Opinions are Daniel Short’s and do not represent Visit Grand Junction "
         "or the City of Grand Junction.\n\n"
     )
+
     generated = DISCLAIMER + answer_text
 
     return {

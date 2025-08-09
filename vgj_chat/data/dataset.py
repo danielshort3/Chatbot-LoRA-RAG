@@ -13,8 +13,9 @@ from pathlib import Path
 import requests
 import trafilatura
 from tqdm.auto import tqdm
-from ..utils.text import token_len
+
 from ..config import CFG
+from ..utils.text import token_len
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -53,7 +54,7 @@ STARTUP_TIMEOUT = int(os.getenv("OLLAMA_STARTUP_TIMEOUT", "60"))
 # the dataset format stable.
 PARA_MAX = 3
 ANSWER_TOK_CAP = 220
-CTX_MAX = 5
+CTX_MAX = 3
 
 
 TXT_DIR = Path("data/html_txt")
@@ -283,31 +284,21 @@ def build_auto_dataset() -> None:
         )
         return
 
-    start_idx = 0
-    valid_examples: list[dict[str, str]] = []
-
+    existing: list[dict[str, str]] = []
     if AUTO_QA_JL.exists():
         try:
-            lines = AUTO_QA_JL.read_text().splitlines()
+            for line in AUTO_QA_JL.read_text().splitlines():
+                try:
+                    existing.append(json.loads(line))
+                except json.JSONDecodeError:
+                    break
         except OSError:
-            lines = []
-        for line in lines:
-            try:
-                valid_examples.append(json.loads(line))
-            except json.JSONDecodeError:
-                break
-        qa_count = len(valid_examples)
-        if qa_count == len(passages) and qa_count > 0:
-            print(f"{AUTO_QA_JL} exists with {qa_count} pairs; skipping dataset build")
+            pass
+        if existing and len(existing) >= len(passages):
+            print(
+                f"{AUTO_QA_JL} exists with {len(existing)} samples; skipping dataset build"
+            )
             return
-        if qa_count:
-            # drop the last entry to ensure it is regenerated
-            valid_examples = valid_examples[:-1]
-            start_idx = len(valid_examples)
-            with AUTO_QA_JL.open("w") as f:
-                for ex in valid_examples:
-                    f.write(json.dumps(ex) + "\n")
-        print(f"{AUTO_QA_JL} incomplete; resuming dataset build")
 
     AUTO_QA_JL.parent.mkdir(parents=True, exist_ok=True)
     print(f"Starting Ollama server for {LLM_NAME} …")
@@ -315,40 +306,39 @@ def build_auto_dataset() -> None:
     _ensure_model()
     generated = 0
     try:
-        with AUTO_QA_JL.open("a") as f:
-            for paras in tqdm(passages[start_idx:], desc="auto-QA", unit="page"):
+        with AUTO_QA_JL.open("w") as f:
+            for paras in tqdm(passages, desc="auto-QA", unit="page"):
                 passage = "\n\n".join(paras)
-
                 answer = passage
                 available_parts = paras
-                # -------------------------------------------------------------------
 
                 question = _gen_question(passage)
 
-                ctx_blocks: list[str] = []
-                if available_parts:
-                    max_ctx = min(len(available_parts), CTX_MAX)
-                    num_ctx = _choose_num_ctx(max_ctx)
-                    if num_ctx:
-                        ctx_parts = random.sample(available_parts, k=num_ctx)
-                        for part in ctx_parts:
-                            ctx_blocks.append(
-                                f"<CONTEXT>\n{_gen_context(question, part)}\n</CONTEXT>",
-                            )
-                        random.shuffle(ctx_blocks)
+                num_samples = random.randint(1, 3)
+                for _ in range(num_samples):
+                    ctx_blocks: list[str] = []
+                    if available_parts:
+                        max_ctx = min(len(available_parts), CTX_MAX)
+                        num_ctx = _choose_num_ctx(max_ctx)
+                        if num_ctx:
+                            ctx_parts = random.sample(available_parts, k=num_ctx)
+                            for part in ctx_parts:
+                                ctx_blocks.append(
+                                    f"<CONTEXT>\n{_gen_context(question, part)}\n</CONTEXT>",
+                                )
+                            random.shuffle(ctx_blocks)
 
-                ctx_str = "\n\n".join(ctx_blocks)
-                prompt = f"{ctx_str}\n\n{question}" if ctx_blocks else question
-                f.write(json.dumps({"input": prompt, "output": answer}) + "\n")
-                generated += 1
+                    ctx_str = "\n\n".join(ctx_blocks)
+                    prompt = f"{ctx_str}\n\n{question}" if ctx_blocks else question
+                    f.write(json.dumps({"input": prompt, "output": answer}) + "\n")
+                    generated += 1
 
         print(
-            f"Generated {generated:,} new pairs → {AUTO_QA_JL}; "
+            f"Generated {generated:,} samples → {AUTO_QA_JL}; "
             f"skipped {skipped} passages (boilerplate/empty); "
             f"skipped {long_outputs} passages over {CFG.max_new_tokens} tokens.",
         )
     finally:
-        # Ensure the model is unloaded and server stopped even if generation fails.
         _stop_model()
         _stop_server(server)
 
