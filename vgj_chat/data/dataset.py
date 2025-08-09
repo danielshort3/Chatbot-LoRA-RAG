@@ -14,7 +14,7 @@ import requests
 import trafilatura
 from tqdm.auto import tqdm
 from ..utils.text import token_len
-from ...config import CFG
+from ..config import CFG
 
 # ---------------------------------------------------------------------------
 # Configuration
