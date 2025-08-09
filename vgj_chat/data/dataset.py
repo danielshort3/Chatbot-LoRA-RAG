@@ -15,7 +15,7 @@ import trafilatura
 from tqdm.auto import tqdm
 
 from ..config import CFG
-from ..utils.text import token_len
+from ..utils.text import token_len, clean_text
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -309,10 +309,11 @@ def build_auto_dataset() -> None:
         with AUTO_QA_JL.open("w") as f:
             for paras in tqdm(passages, desc="auto-QA", unit="page"):
                 passage = "\n\n".join(paras)
+                passage = clean_text(passage)
                 answer = passage
-                available_parts = paras
+                available_parts = [clean_text(p) for p in paras]
 
-                question = _gen_question(passage)
+                question = clean_text(_gen_question(passage))
 
                 num_samples = random.randint(1, 3)
                 for _ in range(num_samples):
@@ -324,13 +325,18 @@ def build_auto_dataset() -> None:
                             ctx_parts = random.sample(available_parts, k=num_ctx)
                             for part in ctx_parts:
                                 ctx_blocks.append(
-                                    f"<CONTEXT>\n{_gen_context(question, part)}\n</CONTEXT>",
+                                    f"<CONTEXT>\n{clean_text(_gen_context(question, part))}\n</CONTEXT>",
                                 )
                             random.shuffle(ctx_blocks)
 
                     ctx_str = "\n\n".join(ctx_blocks)
                     prompt = f"{ctx_str}\n\n{question}" if ctx_blocks else question
-                    f.write(json.dumps({"input": prompt, "output": answer}) + "\n")
+                    prompt = clean_text(prompt)
+                    answer_clean = clean_text(answer)
+                    f.write(
+                        json.dumps({"input": prompt, "output": answer_clean})
+                        + "\n"
+                    )
                     generated += 1
 
         print(
