@@ -14,6 +14,7 @@ import requests
 import trafilatura
 from tqdm.auto import tqdm
 from ..utils.text import token_len
+from ...config import CFG
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -299,19 +300,16 @@ def build_auto_dataset() -> None:
         with AUTO_QA_JL.open("a") as f:
             for paras in tqdm(passages[start_idx:], desc="auto-QA", unit="page"):
                 passage = "\n\n".join(paras)
-                words, answer_words, used_paras = 0, [], []
-                for p in paras:
-                    if words + len(p.split()) > ANSWER_TOK_CAP:
-                        break
-                    answer_words.extend(p.split())
-                    words += len(p.split())
-                    used_paras.append(p)
-                answer = " ".join(answer_words) or paras[0]
-                if token_len(answer) > 512:
+
+                answer = passage
+                if token_len(answer) > CFG.max_new_tokens:
                     long_outputs += 1
                     continue
+                available_parts = paras
+                # -------------------------------------------------------------------
+
                 question = _gen_question(passage)
-                available_parts = used_paras
+
                 ctx_blocks: list[str] = []
                 if available_parts:
                     max_ctx = min(len(available_parts), CTX_MAX)
@@ -323,13 +321,16 @@ def build_auto_dataset() -> None:
                                 f"<CONTEXT>\n{_gen_context(question, part)}\n</CONTEXT>",
                             )
                         random.shuffle(ctx_blocks)
+
                 ctx_str = "\n\n".join(ctx_blocks)
                 prompt = f"{ctx_str}\n\n{question}" if ctx_blocks else question
                 f.write(json.dumps({"input": prompt, "output": answer}) + "\n")
                 generated += 1
+
         print(
-            f"Generated {generated:,} new pairs → {AUTO_QA_JL}; skipped {skipped} passages; "
-            f"{long_outputs} outputs over 512 tokens",
+            f"Generated {generated:,} new pairs → {AUTO_QA_JL}; "
+            f"skipped {skipped} passages (boilerplate/empty); "
+            f"skipped {long_outputs} passages over {CFG.max_new_tokens} tokens.",
         )
     finally:
         # Ensure the model is unloaded and server stopped even if generation fails.

@@ -7,26 +7,21 @@ import torch  # type: ignore
 from . import boot as _boot
 from .retrieval import retrieve_unique
 
-system_prompt = (
-    "You are a friendly travel expert representing Visit Grand Junction.\n"
-    "Use the supplied context excerpts to answer questions about Grand Junction, Colorado and its surroundings in a warm, adventurous tone that highlights outdoor recreation, local culture, and natural beauty.\n"
-    "Only discuss Grand Junction, Colorado. If asked about other destinations, prices, or deals, politely explain that you can only talk about Grand Junction.\n"
-    "Cite or reference the context when relevant.\n"
-    "If the context does not contain the needed information, say you don’t know and recommend checking official Visit Grand Junction resources."
-)
+system_prompt = """You are a friendly travel expert representing Visit Grand Junction. 
+Answer questions about Grand Junction, Colorado and its surroundings in a warm, adventurous tone that highlights outdoor recreation, local culture, and natural beauty. 
+Keep responses concise, factual, and helpful; avoid speculation or invented details. 
+If you are unsure or lack information, say so and suggest checking official Visit Grand Junction resources."""
 
 
 def _build_messages(question: str, passages: List[Tuple[float, str, str]]):
-    context_parts: list[str] = []
-    sources: list[str] = []
-    for i, (_score, text, url) in enumerate(passages, 1):
-        context_parts.append(f"[{i}] {text}\nURL: {url}")
-        sources.append(url)
-    context = "\n\n".join(context_parts)
+    ctx_blocks = [f"<CONTEXT>\n{text.strip()}\n</CONTEXT>" for _, text, _ in passages]
+    user = ("\n\n".join(ctx_blocks) + "\n\n" if ctx_blocks else "") + question.strip()
+
     messages = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": f"{context}\n\nQuestion: {question}"},
+        {"role": "user", "content": user},
     ]
+    sources = [url for _, _, url in passages]
     return messages, sources
 
 
@@ -49,7 +44,7 @@ def chat(question: str):
             messages, return_tensors="pt", add_generation_prompt=True
         ).to(model.device)
         n_prompt = inputs.shape[1]
-        max_new = min(_boot.CFG.max_new_tokens, model.config.max_position_embeddings - n_prompt)
+        max_new = min(_boot.CFG.max_new_tokens, model.config.max_position_embeddings - n_prompt - 32)
 
         generated = model.generate(
             input_ids=inputs,
