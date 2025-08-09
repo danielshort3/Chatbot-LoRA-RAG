@@ -122,8 +122,9 @@ Use `docker exec` to run the helper scripts inside the container as needed. The 
 After running the pipeline and producing `faiss.index`, `meta.jsonl` and the
 merged 4‑bit model directory, build `Dockerfile.sagemaker` and push the image to
 ECR. Copy the artifacts into a `model/` directory before building so the
-container includes everything required for inference on SageMaker. Dependency
-installation uses `requirements.sagemaker.txt` during the build.
+container includes everything required for inference on SageMaker. The
+`scripts/inference.py` entrypoint will be used by SageMaker for serving.
+Dependency installation uses `requirements.sagemaker.txt` during the build.
 
 ## Configuration
 

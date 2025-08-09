@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Any, Dict
 
@@ -9,6 +10,7 @@ from sagemaker_inference import model_server
 from sentence_transformers import SentenceTransformer
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+sys.path.append(str(Path(__file__).resolve().parents[1]))
 from vgj_chat.config import CFG
 
 CACHE_DIR = Path(os.environ.get("TRANSFORMERS_CACHE", "/tmp/hf_cache"))
@@ -43,10 +45,12 @@ def model_fn(model_dir: str) -> Dict[str, Any]:
         "device": device,
     }
 
+
 system_prompt = """You are a friendly travel expert representing Visit Grand Junction. 
 Answer questions about Grand Junction, Colorado and its surroundings in a warm, adventurous tone that highlights outdoor recreation, local culture, and natural beauty. 
 Keep responses concise, factual, and helpful; avoid speculation or invented details. 
 If you are unsure or lack information, say so and suggest checking official Visit Grand Junction resources."""
+
 
 def predict_fn(data, ctx):
     mdl = ctx
@@ -97,7 +101,7 @@ def predict_fn(data, ctx):
     gen_ids = lm.generate(
         input_ids=input_ids,
         max_new_tokens=max_new,
-        do_sample=False,                     # keeps style concise/consistent
+        do_sample=False,  # keeps style concise/consistent
         eos_token_id=tok.eos_token_id,
         pad_token_id=tok.eos_token_id,
     )
