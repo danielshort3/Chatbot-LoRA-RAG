@@ -10,7 +10,7 @@ import math
 import os
 import random
 from pathlib import Path
-from typing import Dict, Iterable
+from typing import Dict, Iterable, Any
 
 import numpy as np
 import torch
@@ -101,10 +101,30 @@ def parse_args() -> argparse.Namespace:
 # Data handling
 # ---------------------------------------------------------------------------
 
-system_prompt = """You are a friendly travel expert representing Visit Grand Junction. 
+system_prompt = """You are a friendly travel expert representing Visit Grand Junction.
 Answer questions about Grand Junction, Colorado and its surroundings in a warm, adventurous tone that highlights outdoor recreation, local culture, and natural beauty. 
 Keep responses concise, factual, and helpful; avoid speculation or invented details. 
 If you are unsure or lack information, say so and suggest checking official Visit Grand Junction resources."""
+
+
+def format_example(
+    example: Dict[str, Any],
+    tokenizer: AutoTokenizer,
+    prompt_field: str,
+    response_field: str,
+) -> str:
+    """Format a dataset row using the tokenizer's chat template."""
+
+    if "messages" in example:
+        return tokenizer.apply_chat_template(example["messages"], tokenize=False)
+    return tokenizer.apply_chat_template(
+        [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": example[prompt_field].strip()},
+            {"role": "assistant", "content": example[response_field].strip()},
+        ],
+        tokenize=False,
+    )
 
 
 def load_and_tokenize(
@@ -117,24 +137,21 @@ def load_and_tokenize(
     if not Path(data_path).exists():
         raise FileNotFoundError(data_path)
     ds = load_dataset("json", data_files=data_path)["train"]
-    missing = [f for f in (prompt_field, response_field) if f not in ds.column_names]
-    if missing:
-        raise ValueError(f"Dataset missing fields: {missing}")
 
-    def _format(example: Dict[str, str]) -> str:
-        """Apply chat template for a single example."""
+    if {"input", "output"}.issubset(set(ds.column_names)):
+        ds = ds.rename_columns({"input": "prompt", "output": "response"})
+        if prompt_field == "input":
+            prompt_field = "prompt"
+        if response_field == "output":
+            response_field = "response"
 
-        return tokenizer.apply_chat_template(
-            [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": example[prompt_field].strip()},
-                {"role": "assistant", "content": example[response_field].strip()},
-            ],
-            tokenize=False,
-        )
+    if "messages" not in ds.column_names:
+        missing = [f for f in (prompt_field, response_field) if f not in ds.column_names]
+        if missing:
+            raise ValueError(f"Dataset missing fields: {missing}")
 
-    def _tokenize(example: Dict[str, str]) -> Dict[str, Iterable[int]]:
-        text = _format(example)
+    def _tokenize(example: Dict[str, Any]) -> Dict[str, Iterable[int]]:
+        text = format_example(example, tokenizer, prompt_field, response_field)
         toks = tokenizer(text, truncation=False)
         if len(toks["input_ids"]) > tokenizer.model_max_length:
             raise ValueError(
