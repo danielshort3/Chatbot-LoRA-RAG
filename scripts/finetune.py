@@ -75,12 +75,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--patience", type=int, default=3, help="Early stopping patience"
     )
-    parser.add_argument(
-        "--lr-patience", type=int, default=2, help="Patience before reducing LR"
-    )
-    parser.add_argument(
-        "--lr-decay-factor", type=float, default=0.5, help="LR reduction factor"
-    )
     parser.add_argument("--config", type=str, help="Optional YAML config file")
     args = parser.parse_args()
 
@@ -307,11 +301,11 @@ def main() -> None:
         load_best_model_at_end=True,
         metric_for_best_model="eval_loss",
         greater_is_better=False,
-        lr_scheduler_type="reduce_lr_on_plateau",
-        lr_scheduler_kwargs={
-            "patience": args.lr_patience,
-            "factor": args.lr_decay_factor,
-        },
+        lr_scheduler_type="cosine",
+        warmup_ratio=0.1,
+        weight_decay=0.01,
+        max_grad_norm=1.0,
+        optim="paged_adamw_8bit" if torch.cuda.is_available() else "adamw_torch",
         seed=args.seed,
         bf16=torch.cuda.is_available() and torch.cuda.is_bf16_supported(),
         report_to=[],
