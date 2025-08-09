@@ -229,11 +229,19 @@ BOILER_PAT = re.compile(
 # ---------------------------------------------------------------------------
 
 
-def _collect_passages() -> tuple[list[list[str]], int]:
-    """Return paragraphs for each non-boiler page and a skip count."""
+def _collect_passages() -> tuple[list[list[str]], int, int]:
+    """Return paragraphs for each non-boiler page and skip counts.
+
+    The returned tuple contains ``(passages, skipped, long_outputs)`` where
+    ``skipped`` counts pages dropped for being empty or boilerplate and
+    ``long_outputs`` counts pages exceeding ``CFG.max_new_tokens``.  Filtering
+    long passages here ensures downstream logic does not attempt to generate
+    Q&A pairs for them or resume their processing later on.
+    """
 
     passages: list[list[str]] = []
     skipped = 0
+    long_outputs = 0
     for txt_f in sorted(TXT_DIR.glob("*.txt")):
         html = (RAW_HTML_DIR / f"{txt_f.stem}.html").read_text()
         text = trafilatura.extract(html) or ""
@@ -245,14 +253,17 @@ def _collect_passages() -> tuple[list[list[str]], int]:
         if BOILER_PAT.search(passage):
             skipped += 1
             continue
+        if token_len(passage) > CFG.max_new_tokens:
+            long_outputs += 1
+            continue
         passages.append(paras)
-    return passages, skipped
+    return passages, skipped, long_outputs
 
 
 def count_expected_pairs() -> int:
     """Return the number of QA pairs expected after boilerplate filtering."""
 
-    passages, _ = _collect_passages()
+    passages, _, _ = _collect_passages()
     return len(passages)
 
 
@@ -262,7 +273,15 @@ def count_expected_pairs() -> int:
 
 
 def build_auto_dataset() -> None:
-    passages, skipped = _collect_passages()
+    passages, skipped, long_outputs = _collect_passages()
+
+    if not passages:
+        print(
+            f"No passages within token limit; skipped {skipped} passages "
+            f"(boilerplate/empty) and {long_outputs} passages over "
+            f"{CFG.max_new_tokens} tokens."
+        )
+        return
 
     start_idx = 0
     valid_examples: list[dict[str, str]] = []
@@ -295,16 +314,12 @@ def build_auto_dataset() -> None:
     server = _start_server()
     _ensure_model()
     generated = 0
-    long_outputs = 0
     try:
         with AUTO_QA_JL.open("a") as f:
             for paras in tqdm(passages[start_idx:], desc="auto-QA", unit="page"):
                 passage = "\n\n".join(paras)
 
                 answer = passage
-                if token_len(answer) > CFG.max_new_tokens:
-                    long_outputs += 1
-                    continue
                 available_parts = paras
                 # -------------------------------------------------------------------
 
