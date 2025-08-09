@@ -105,6 +105,7 @@ def invoke(p: Prompt):
         TOKENIZER.decode(output[0][n_prompt:], skip_special_tokens=True).strip()
     )
 
+
     return {
         "generated_text": answer_text,
         "sources": sources,
