@@ -198,6 +198,48 @@ class DiagnosticsCallback(TrainerCallback):
             )
 
 
+class GradDebugCallback(TrainerCallback):
+    """Print gradient norms and confirm params updated."""
+
+    def __init__(self, model: torch.nn.Module, verbose: bool = False) -> None:
+        self.model = model
+        self.verbose = verbose
+        self._initial = {
+            n: p.detach().clone()
+            for n, p in model.named_parameters()
+            if p.requires_grad
+        }
+
+    def on_backward_end(self, args, state, control, **kwargs):
+        if state.global_step % args.logging_steps != 0 or state.global_step == 0:
+            return
+        norms = {
+            n: float(p.grad.detach().norm())
+            for n, p in self.model.named_parameters()
+            if p.requires_grad and p.grad is not None
+        }
+        if not norms:
+            return
+        total = sum(g**2 for g in norms.values()) ** 0.5
+        print(f"[GradDebug] step {state.global_step} grad_norm={total:.6f}")
+        if self.verbose:
+            for n, g in list(norms.items())[:3]:
+                print(f"[GradDebug]   {n} grad_norm={g:.6f}")
+        return control
+
+    def on_train_end(self, args, state, control, **kwargs):
+        for name, p in self.model.named_parameters():
+            if p.requires_grad and not torch.equal(p.detach(), self._initial[name]):
+                delta = (p.detach() - self._initial[name]).abs().max().item()
+                print(
+                    f"[GradDebug] param {name} changed; max_abs_diff={delta:.6e}"
+                )
+                break
+        else:
+            print("[GradDebug] trainable parameters did not change!")
+        return control
+
+
 # ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
@@ -324,6 +366,7 @@ def main() -> None:
         callbacks=[
             DiagnosticsCallback(model),
             EarlyStoppingCallback(early_stopping_patience=args.patience),
+            GradDebugCallback(model),
         ],
     )
 
