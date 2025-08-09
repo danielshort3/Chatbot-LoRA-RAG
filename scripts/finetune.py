@@ -127,7 +127,7 @@ def load_and_tokenize(
     prompt_field: str,
     response_field: str,
     seed: int,
-) -> Dict[str, "datasets.Dataset"]:
+) -> tuple[Dict[str, "datasets.Dataset"], str, str]:
     if not Path(data_path).exists():
         raise FileNotFoundError(data_path)
     ds = load_dataset("json", data_files=data_path)["train"]
@@ -148,7 +148,7 @@ def load_and_tokenize(
 
     ds = ds.shuffle(seed=seed)
     split = ds.train_test_split(test_size=0.1, seed=seed)
-    return split
+    return split, prompt_field, response_field
 
 
 # ---------------------------------------------------------------------------
@@ -265,14 +265,6 @@ def main() -> None:
     tokenizer.add_special_tokens(SPECIAL_TOKENS)
     tokenizer.pad_token = tokenizer.eos_token
 
-    global format_example
-    format_example = partial(
-        format_example,
-        tokenizer=tokenizer,
-        prompt_field=args.prompt_field,
-        response_field=args.response_field,
-    )
-
     if torch.cuda.is_available():
         bnb_cfg = BitsAndBytesConfig(
             load_in_4bit=True,
@@ -323,8 +315,16 @@ def main() -> None:
     if not any("lora" in n.lower() for n in trainable):
         raise ValueError("LoRA parameters are frozen")
 
-    datasets = load_and_tokenize(
+    datasets, prompt_field, response_field = load_and_tokenize(
         args.data, tokenizer, args.prompt_field, args.response_field, args.seed
+    )
+
+    global format_example
+    format_example = partial(
+        format_example,
+        tokenizer=tokenizer,
+        prompt_field=prompt_field,
+        response_field=response_field,
     )
 
     data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False)
