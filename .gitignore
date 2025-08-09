@@ -27,7 +27,7 @@ dist/
 *.egg-info/
 
 # Ignore runtime artifacts
-data/
+/data/
 faiss.index
 meta.jsonl
 *.env
