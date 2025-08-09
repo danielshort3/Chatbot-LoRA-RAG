@@ -23,12 +23,11 @@ from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     BitsAndBytesConfig,
-    DataCollatorForLanguageModeling,
     EarlyStoppingCallback,
     TrainerCallback,
     set_seed,
 )
-from trl import SFTConfig, SFTTrainer
+from trl import SFTConfig, SFTTrainer, DataCollatorForCompletionOnlyLM
 
 SPECIAL_TOKENS = {"additional_special_tokens": ["<CONTEXT>", "</CONTEXT>"]}
 
@@ -157,47 +156,51 @@ def load_and_tokenize(
 
 
 class DiagnosticsCallback(TrainerCallback):
-    """Report losses, gradient norms, GPU memory and LR schedule."""
-
+    """Compact, readable logs each logging step."""
     def __init__(self, model: torch.nn.Module) -> None:
         self.model = model
 
     def on_log(self, args, state, control, logs=None, **kwargs):
-        if logs is None:
+        if not logs:
             return
         step = state.global_step
-        if "loss" in logs:
-            ppl = math.exp(logs["loss"])
-            print(f"[step {step}] train_loss={logs['loss']:.4f} ppl={ppl:.2f}")
-        if "eval_loss" in logs:
-            eval_ppl = math.exp(logs["eval_loss"])
-            print(
-                f"[step {step}] val_loss={logs['eval_loss']:.4f} val_ppl={eval_ppl:.2f}"
-            )
-        if "learning_rate" in logs:
-            print(f"[step {step}] lr={logs['learning_rate']:.6e}")
+        loss = logs.get("loss")
+        evl  = logs.get("eval_loss")
+        lr   = logs.get("learning_rate")
+        mta  = logs.get("mean_token_accuracy") or logs.get("eval_mean_token_accuracy")
+        toks = logs.get("num_tokens") or logs.get("eval_num_tokens")
+
+        pieces = [f"step={step}"]
+        if loss is not None:
+            pieces.append(f"train_loss={loss:.4f}")
+            pieces.append(f"train_ppl={math.exp(loss):.2f}")
+        if evl is not None:
+            pieces.append(f"val_loss={evl:.4f}")
+            pieces.append(f"val_ppl={math.exp(evl):.2f}")
+        if mta is not None:
+            pieces.append(f"tok_acc={mta:.3f}")
+        if lr is not None:
+            pieces.append(f"lr={float(lr):.2e}")
+        if toks is not None:
+            pieces.append(f"tokens={int(toks):,}")
         if torch.cuda.is_available():
             mem = torch.cuda.memory_allocated() / 1024**2
-            print(f"[step {step}] cuda_mem={mem:.0f}MB")
+            pieces.append(f"cuda_mem={mem:.0f}MB")
+        print("[log] " + " | ".join(pieces))
 
     def on_step_end(self, args, state, control, **kwargs):
+        # Optional: show only a COUNT of zero-grad LoRA params instead of names
         if state.global_step % args.logging_steps != 0 or state.global_step == 0:
             return
-        norms = []
-        zero_grad = []
+        count = 0
+        total = 0
         for name, p in self.model.named_parameters():
             if "lora" in name.lower() and p.requires_grad:
+                total += 1
                 if p.grad is None or p.grad.abs().sum() == 0:
-                    zero_grad.append(name)
-                    continue
-                norms.append(p.grad.detach().norm().item())
-        if norms:
-            total = math.sqrt(sum(n**2 for n in norms))
-            print(f"[step {state.global_step}] lora_grad_norm={total:.6f}")
-        if zero_grad:
-            print(
-                f"[step {state.global_step}] zero-grad params: {', '.join(zero_grad[:3])}"
-            )
+                    count += 1
+        if total:
+            print(f"[log] step={state.global_step} | lora_zero_grad={count}/{total}")
 
 
 class GradDebugCallback(TrainerCallback):
@@ -264,6 +267,7 @@ def main() -> None:
     )
     tokenizer.add_special_tokens(SPECIAL_TOKENS)
     tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.truncation_side = "left"
 
     if torch.cuda.is_available():
         bnb_cfg = BitsAndBytesConfig(
@@ -327,7 +331,23 @@ def main() -> None:
         response_field=response_field,
     )
 
-    data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False)
+    # Build a 'text' column using your chat template, then drop prompt/completion
+    def _to_text(ex):
+        return {"text": format_example(ex)}
+
+    for split_name in ["train", "test"]:
+        datasets[split_name] = datasets[split_name].map(_to_text, desc=f"Build text ({split_name})")
+
+    # Remove fields that trigger TRL's prompt+completion path
+    drop_cols = [c for c in (prompt_field, response_field) if c in datasets["train"].column_names]
+    for split_name in ["train", "test"]:
+        datasets[split_name] = datasets[split_name].remove_columns(drop_cols)
+
+    # Mask everything before the assistant's reply
+    data_collator = DataCollatorForCompletionOnlyLM(
+        response_template="[/INST]",  # if masking doesn't trigger, try " [/INST]"
+        tokenizer=tokenizer,
+    )
 
     training_args = SFTConfig(
         output_dir=args.output_dir,
@@ -351,8 +371,9 @@ def main() -> None:
         seed=args.seed,
         bf16=torch.cuda.is_available() and torch.cuda.is_bf16_supported(),
         report_to=[],
-        completion_only_loss=False,
-        dataset_text_field=None,
+        dataset_text_field="text",   # <-- tell TRL to read from 'text'
+        packing=False,  # required for CompletionOnly collator
+        save_steps = args.eval_steps
     )
 
     trainer = SFTTrainer(
@@ -362,13 +383,14 @@ def main() -> None:
         eval_dataset=datasets["test"],
         data_collator=data_collator,
         processing_class=tokenizer,
-        formatting_func=format_example,
+# formatting_func=None  <-- remove; we already built 'text'
         callbacks=[
             DiagnosticsCallback(model),
             EarlyStoppingCallback(early_stopping_patience=args.patience),
             GradDebugCallback(model),
         ],
     )
+
 
     trainer.train()
     model = trainer.model
