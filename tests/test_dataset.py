@@ -67,8 +67,14 @@ def test_build_auto_dataset_starts_server(monkeypatch, tmp_path):
         lambda: calls.__setitem__("ensure", calls["ensure"] + 1),
     )
 
+    tra = ModuleType("trafilatura")
+    tra.extract = lambda html: "word " * 30
+    monkeypatch.setattr(dataset, "trafilatura", tra)
+
     monkeypatch.setattr(dataset, "TXT_DIR", tmp_path)
     monkeypatch.setattr(dataset, "RAW_HTML_DIR", tmp_path)
+    (tmp_path / "page.txt").write_text("dummy")
+    (tmp_path / "page.html").write_text("<p>dummy</p>")
     monkeypatch.setattr(dataset, "AUTO_QA_JL", tmp_path / "out.jsonl")
 
     dataset.build_auto_dataset()
@@ -172,6 +178,50 @@ def test_build_auto_dataset_skips_when_complete(monkeypatch, tmp_path):
         lines = [json.loads(line) for line in f]
     assert len(lines) == len(existing)
     assert lines[0]["input"] == "existing0"
+
+
+def test_build_auto_dataset_skips_long_passages(monkeypatch, tmp_path):
+    dataset = _load_dataset(monkeypatch, "text")
+
+    calls = {"popen": 0}
+
+    class DummyProc:
+        def poll(self):
+            return None
+
+        def terminate(self):
+            return None
+
+        def wait(self, timeout=None):
+            return None
+
+    def popen(cmd, stdout=None, stderr=None):
+        calls["popen"] += 1
+        return DummyProc()
+
+    monkeypatch.setattr(dataset.subprocess, "Popen", popen)
+    monkeypatch.setattr(dataset, "_wait_for_server", lambda proc: True)
+    monkeypatch.setattr(dataset, "_stop_model", lambda: None)
+    monkeypatch.setattr(dataset, "_ensure_model", lambda: None)
+
+    monkeypatch.setattr(dataset, "CFG", types.SimpleNamespace(max_new_tokens=100))
+    tra = ModuleType("trafilatura")
+    tra.extract = lambda html: "word " * 300
+    monkeypatch.setattr(dataset, "trafilatura", tra)
+
+    monkeypatch.setattr(dataset, "TXT_DIR", tmp_path)
+    monkeypatch.setattr(dataset, "RAW_HTML_DIR", tmp_path)
+    (tmp_path / "page.txt").write_text("dummy")
+    (tmp_path / "page.html").write_text("<p>dummy</p>")
+    auto_jl = tmp_path / "out.jsonl"
+    monkeypatch.setattr(dataset, "AUTO_QA_JL", auto_jl)
+
+    dataset.build_auto_dataset()
+    assert calls["popen"] == 0
+    assert not auto_jl.exists()
+
+    dataset.build_auto_dataset()
+    assert calls["popen"] == 0
 
 
 def test_count_expected_pairs_filters_boiler(monkeypatch, tmp_path):
