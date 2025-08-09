@@ -113,16 +113,8 @@ def predict_fn(data, ctx):
         tok.decode(gen_ids[0][n_prompt:], skip_special_tokens=True).strip()
     )
 
-    DISCLAIMER = (
-        "⚠️  Portfolio demo only. "
-        "Opinions are Daniel Short’s and do not represent Visit Grand Junction "
-        "or the City of Grand Junction.\n\n"
-    )
-
-    generated = DISCLAIMER + answer_text
-
     return {
-        "generated_text": generated,
+        "generated_text": answer_text,
         "sources": sources,
         "token_usage": {"prompt": n_prompt, "answer": n_answer, "total": n_total},
     }

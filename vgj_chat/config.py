@@ -26,7 +26,8 @@ class Config:
     rerank_model: str = "BAAI/bge-reranker-base"
 
     # RAG settings
-    top_k: int = 3
+    top_k: int = 1
+
     score_min: float = 0.0
     max_new_tokens: int = 256
 
