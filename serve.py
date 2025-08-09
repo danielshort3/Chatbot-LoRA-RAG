@@ -11,6 +11,7 @@ from sentence_transformers import SentenceTransformer
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from vgj_chat.config import CFG
+from vgj_chat.utils.text import strip_metadata
 
 MODEL_DIR = pathlib.Path("/opt/ml/model")
 CACHE_DIR = pathlib.Path(os.environ.get("TRANSFORMERS_CACHE", "/tmp/hf_cache"))
@@ -51,15 +52,15 @@ def invoke(p: Prompt):
         raise ValueError(
             f"Embedding dimension {query_emb.shape[0]} does not match index dimension {INDEX.d}"
         )
-    _, ids = INDEX.search(query_emb.reshape(1, -1), 5)
+    _, ids = INDEX.search(query_emb.reshape(1, -1), CFG.top_k)
     hits = [METADATA[i] for i in ids[0]]
     context_parts: list[str] = []
     sources: list[str] = []
-    for i, h in enumerate(hits, 1):
+    for h in hits:
         src = h.get("source") or h.get("url") or "unknown"
         text = h.get("text")
         if text:
-            context_parts.append(f"[{i}] {text}\nURL: {src}")
+            context_parts.append(f"<CONTEXT>\n{text}\n</CONTEXT>")
         if src not in sources:
             sources.append(src)
     context = "\n\n".join(context_parts)
@@ -68,13 +69,13 @@ def invoke(p: Prompt):
         "You are a friendly travel expert representing Visit Grand Junction.\n"
         "Use the supplied context excerpts to answer questions about Grand Junction, Colorado and its surroundings in a warm, adventurous tone that highlights outdoor recreation, local culture, and natural beauty.\n"
         "Only discuss Grand Junction, Colorado. If asked about other destinations, prices, or deals, politely explain that you can only talk about Grand Junction.\n"
-        "Cite or reference the context when relevant.\n"
         "If the context does not contain the needed information, say you don’t know and recommend checking official Visit Grand Junction resources."
     )
 
+    user_content = f"{context}\n\n{p.inputs}" if context else p.inputs
     messages = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": f"{context}\n\nQuestion: {p.inputs}"},
+        {"role": "user", "content": user_content},
     ]
 
     # --- tokenise prompt ---------------------------------------------------
@@ -100,20 +101,12 @@ def invoke(p: Prompt):
 
     # (optional) include in JSON payload
     # ---------------------------------------------------------------
-    DISCLAIMER = (
-        "⚠️  Portfolio demo only. "
-        "Opinions are Daniel Short’s and do **not** represent Visit Grand Junction "
-        "or the City of Grand Junction.\n\n"
+    answer_text = strip_metadata(
+        TOKENIZER.decode(output[0][n_prompt:], skip_special_tokens=True).strip()
     )
 
-    answer_text = TOKENIZER.decode(
-        output[0][n_prompt:], skip_special_tokens=True
-    ).strip()
-
-    generated = DISCLAIMER + answer_text
-
     return {
-        "generated_text": generated,
+        "generated_text": answer_text,
         "sources": sources,
         "token_usage": {
             "prompt": n_prompt,
