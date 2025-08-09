@@ -9,8 +9,9 @@ import argparse
 import math
 import os
 import random
+from functools import partial
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any, Dict
 
 import numpy as np
 import torch
@@ -28,7 +29,6 @@ from transformers import (
     set_seed,
 )
 from trl import SFTConfig, SFTTrainer
-from functools import partial
 
 SPECIAL_TOKENS = {"additional_special_tokens": ["<CONTEXT>", "</CONTEXT>"]}
 
@@ -140,7 +140,9 @@ def load_and_tokenize(
             response_field = "response"
 
     if "messages" not in ds.column_names:
-        missing = [f for f in (prompt_field, response_field) if f not in ds.column_names]
+        missing = [
+            f for f in (prompt_field, response_field) if f not in ds.column_names
+        ]
         if missing:
             raise ValueError(f"Dataset missing fields: {missing}")
 
@@ -231,9 +233,7 @@ class GradDebugCallback(TrainerCallback):
         for name, p in self.model.named_parameters():
             if p.requires_grad and not torch.equal(p.detach(), self._initial[name]):
                 delta = (p.detach() - self._initial[name]).abs().max().item()
-                print(
-                    f"[GradDebug] param {name} changed; max_abs_diff={delta:.6e}"
-                )
+                print(f"[GradDebug] param {name} changed; max_abs_diff={delta:.6e}")
                 break
         else:
             print("[GradDebug] trainable parameters did not change!")
@@ -361,7 +361,7 @@ def main() -> None:
         train_dataset=datasets["train"],
         eval_dataset=datasets["test"],
         data_collator=data_collator,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
         formatting_func=format_example,
         callbacks=[
             DiagnosticsCallback(model),
