@@ -10,7 +10,7 @@ import math
 import os
 import random
 from pathlib import Path
-from typing import Dict, Iterable, Any
+from typing import Dict, Any
 
 import numpy as np
 import torch
@@ -24,11 +24,11 @@ from transformers import (
     BitsAndBytesConfig,
     DataCollatorForLanguageModeling,
     EarlyStoppingCallback,
-    Trainer,
     TrainerCallback,
-    TrainingArguments,
     set_seed,
 )
+from trl import SFTConfig, SFTTrainer
+from functools import partial
 
 SPECIAL_TOKENS = {"additional_special_tokens": ["<CONTEXT>", "</CONTEXT>"]}
 
@@ -150,28 +150,9 @@ def load_and_tokenize(
         if missing:
             raise ValueError(f"Dataset missing fields: {missing}")
 
-    def _tokenize(example: Dict[str, Any]) -> Dict[str, Iterable[int]]:
-        text = format_example(example, tokenizer, prompt_field, response_field)
-        toks = tokenizer(text, truncation=False)
-        if len(toks["input_ids"]) > tokenizer.model_max_length:
-            raise ValueError(
-                f"Sequence length {len(toks['input_ids'])} exceeds model limit {tokenizer.model_max_length}"
-            )
-        toks = tokenizer(
-            text,
-            max_length=tokenizer.model_max_length,
-            truncation=True,
-        )
-        # labels are generated on-the-fly by the data collator; returning only
-        # tokenized inputs avoids mismatched sequence lengths during padding
-        return toks
-
     ds = ds.shuffle(seed=seed)
     split = ds.train_test_split(test_size=0.1, seed=seed)
-    tokenized = {
-        k: v.map(_tokenize, remove_columns=v.column_names) for k, v in split.items()
-    }
-    return tokenized
+    return split
 
 
 # ---------------------------------------------------------------------------
@@ -248,6 +229,14 @@ def main() -> None:
     tokenizer.add_special_tokens(SPECIAL_TOKENS)
     tokenizer.pad_token = tokenizer.eos_token
 
+    global format_example
+    format_example = partial(
+        format_example,
+        tokenizer=tokenizer,
+        prompt_field=args.prompt_field,
+        response_field=args.response_field,
+    )
+
     if torch.cuda.is_available():
         bnb_cfg = BitsAndBytesConfig(
             load_in_4bit=True,
@@ -304,7 +293,7 @@ def main() -> None:
 
     data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False)
 
-    training_args = TrainingArguments(
+    training_args = SFTConfig(
         output_dir=args.output_dir,
         per_device_train_batch_size=args.batch_size,
         gradient_accumulation_steps=args.gradient_accumulation,
@@ -326,14 +315,18 @@ def main() -> None:
         seed=args.seed,
         bf16=torch.cuda.is_available() and torch.cuda.is_bf16_supported(),
         report_to=[],
+        completion_only_loss=False,
+        dataset_text_field=None,
     )
 
-    trainer = Trainer(
+    trainer = SFTTrainer(
         model=model,
         args=training_args,
         train_dataset=datasets["train"],
         eval_dataset=datasets["test"],
         data_collator=data_collator,
+        tokenizer=tokenizer,
+        formatting_func=format_example,
         callbacks=[
             DiagnosticsCallback(model),
             EarlyStoppingCallback(early_stopping_patience=args.patience),
