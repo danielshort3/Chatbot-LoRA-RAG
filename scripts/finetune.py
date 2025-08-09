@@ -34,6 +34,17 @@ SPECIAL_TOKENS = {"additional_special_tokens": ["<CONTEXT>", "</CONTEXT>"]}
 
 MODEL_CACHE = Path("data/model_cache")
 
+# Projection layers to target for LoRA adaptation
+TARGET_MODULES = [
+    "q_proj",
+    "k_proj",
+    "v_proj",
+    "o_proj",
+    "gate_proj",
+    "down_proj",
+    "up_proj",
+]
+
 
 # ---------------------------------------------------------------------------
 # Argument parsing and configuration
@@ -257,9 +268,11 @@ def main() -> None:
         lora_dropout=args.lora_dropout,
         bias="none",
         task_type="CAUSAL_LM",
+        target_modules=TARGET_MODULES,
     )
     model = get_peft_model(base, lora_cfg)
     model.config.use_cache = False
+    model.gradient_checkpointing_enable()
     model.print_trainable_parameters()
 
     trainable = [n for n, p in model.named_parameters() if p.requires_grad]
