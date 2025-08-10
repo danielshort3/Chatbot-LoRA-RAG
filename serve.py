@@ -52,7 +52,7 @@ def invoke(p: Prompt):
         raise ValueError(
             f"Embedding dimension {query_emb.shape[0]} does not match index dimension {INDEX.d}"
         )
-    _, ids = INDEX.search(query_emb.reshape(1, -1), CFG.top_k)
+    _, ids = INDEX.search(query_emb.reshape(1, -1), min(CFG.top_k, 3))
     hits = [METADATA[i] for i in ids[0]]
     context_parts: list[str] = []
     sources: list[str] = []
