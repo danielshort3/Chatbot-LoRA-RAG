@@ -11,7 +11,7 @@ from sentence_transformers import SentenceTransformer
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from vgj_chat.config import CFG
-from vgj_chat.utils.text import strip_metadata
+from vgj_chat.utils.text import drop_last_incomplete_paragraph, strip_metadata
 
 MODEL_DIR = pathlib.Path("/opt/ml/model")
 CACHE_DIR = pathlib.Path(os.environ.get("TRANSFORMERS_CACHE", "/tmp/hf_cache"))
@@ -104,7 +104,7 @@ def invoke(p: Prompt):
     answer_text = strip_metadata(
         TOKENIZER.decode(output[0][n_prompt:], skip_special_tokens=True).strip()
     )
-
+    answer_text = drop_last_incomplete_paragraph(answer_text)
 
     return {
         "generated_text": answer_text,
