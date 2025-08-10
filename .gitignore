@@ -36,3 +36,4 @@ meta.jsonl
  
 update_model.sh
 validate_endpoint.sh
+debug_status.sh
