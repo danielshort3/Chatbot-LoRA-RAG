@@ -56,7 +56,7 @@ If you are unsure or lack information, say so and suggest checking official Visi
 def predict_fn(data, ctx):
     mdl = ctx
     prompt = data["inputs"].strip()
-    top_k = data.get("top_k", CFG.top_k)
+    top_k = min(data.get("top_k", CFG.top_k), 3)
 
     # --- retrieve ---
     emb_query = mdl["encoder"].encode(prompt, normalize_embeddings=True)

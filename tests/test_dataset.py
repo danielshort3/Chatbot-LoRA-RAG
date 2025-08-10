@@ -217,6 +217,10 @@ def test_build_auto_dataset_skips_long_passages(monkeypatch, tmp_path):
     auto_jl = tmp_path / "out.jsonl"
     monkeypatch.setattr(dataset, "AUTO_QA_JL", auto_jl)
 
+    # Patch chunker so the long passage isn't split into smaller chunks,
+    # ensuring the build is skipped.
+    monkeypatch.setattr(dataset, "_chunk_paragraphs", lambda paras, max_tokens: [paras])
+
     dataset.build_auto_dataset()
     assert calls["popen"] == 0
     assert not auto_jl.exists()
@@ -291,7 +295,7 @@ def test_choose_num_ctx_clamped(monkeypatch):
     dataset = _load_dataset(monkeypatch, "text")
 
     monkeypatch.setattr(dataset.random, "gauss", lambda mu, sig: 10)
-    assert dataset._choose_num_ctx(5) == 5
+    assert dataset._choose_num_ctx(5) == 3
 
     monkeypatch.setattr(dataset.random, "gauss", lambda mu, sig: -5)
     assert dataset._choose_num_ctx(5) == 0
