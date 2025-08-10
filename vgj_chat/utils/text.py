@@ -28,11 +28,10 @@ _CLEAN_TRANSLATION = {
     ord("\u201E"): '"',  # double low-9 quotation mark
     ord("\u201F"): '"',  # double high-reversed-9 quotation mark
     ord("\u2033"): '"',  # double prime (often inches)
-    ord("\u00AB"): '"',  # «
-    ord("\u00BB"): '"',  # »
-    ord("\u2039"): "'",  # ‹
-    ord("\u203A"): "'",  # ›
-
+    ord("\u00AB"): '"',  # Â«
+    ord("\u00BB"): '"',  # Â»
+    ord("\u2039"): "'",  # Â‹
+    ord("\u203A"): "'",  # Â›
     # Dashes / hyphens / minus
     ord("\u2010"): "-",  # hyphen
     ord("\u2011"): "-",  # non-breaking hyphen
@@ -42,16 +41,12 @@ _CLEAN_TRANSLATION = {
     ord("\u2015"): "-",  # horizontal bar
     ord("\u2212"): "-",  # minus sign (math minus -> hyphen-minus)
     ord("\u2043"): "-",  # hyphen bullet
-
     # Soft hyphen (discretionary) -> drop
     ord("\u00AD"): "",
-
     # Ellipsis
     ord("\u2026"): "...",
-
     # Fraction slash
     ord("\u2044"): "/",
-
     # Spaces -> regular space
     ord("\u00A0"): " ",  # no-break space
     ord("\u202F"): " ",  # narrow no-break space
@@ -68,13 +63,12 @@ _CLEAN_TRANSLATION = {
     ord("\u200A"): " ",  # hair space
     ord("\u205F"): " ",  # medium mathematical space
     ord("\u3000"): " ",  # ideographic space
-
     # Zero-width / joiners / BOM -> drop
-    ord("\u200B"): "",   # zero width space
-    ord("\u200C"): "",   # zero width non-joiner
-    ord("\u200D"): "",   # zero width joiner
-    ord("\u2060"): "",   # word joiner
-    ord("\uFEFF"): "",   # zero width no-break space (BOM)
+    ord("\u200B"): "",  # zero width space
+    ord("\u200C"): "",  # zero width non-joiner
+    ord("\u200D"): "",  # zero width joiner
+    ord("\u2060"): "",  # word joiner
+    ord("\uFEFF"): "",  # zero width no-break space (BOM)
 }
 
 
@@ -119,4 +113,30 @@ def clean_text(text: str) -> str:
     return text.strip()
 
 
-__all__ = ["token_len", "strip_metadata", "clean_text"]
+def drop_last_incomplete_paragraph(text: str) -> str:
+    """Remove the last paragraph if it ends mid sentence.
+
+    A paragraph is considered complete if it finishes with standard
+    sentence-ending punctuation (., !, or ?). If the final paragraph does
+    not end with such punctuation, it is dropped from the returned text.
+    """
+    if not text:
+        return ""
+    paragraphs = text.strip().split("\n\n")
+    while paragraphs and not paragraphs[-1].strip():
+        paragraphs.pop()
+    if not paragraphs:
+        return ""
+    last = paragraphs[-1].strip()
+    if re.search(r"[.!?][\"')\]]*$", last):
+        return "\n\n".join(paragraphs).strip()
+    paragraphs.pop()
+    return "\n\n".join(paragraphs).strip()
+
+
+__all__ = [
+    "token_len",
+    "strip_metadata",
+    "clean_text",
+    "drop_last_incomplete_paragraph",
+]
